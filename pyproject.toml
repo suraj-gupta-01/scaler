@@ -1,0 +1,93 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "adaptive-alert-triage"
+version = "0.1.0"
+description = "Adaptive Alert Triage & Incident Response OpenEnv Environment"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "Scalar Hackathon Team", email = "team@scalar.com"}
+]
+keywords = ["reinforcement-learning", "openenv", "alert-triage", "incident-response"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "pydantic>=2.0.0",
+    "openenv>=0.1.0",
+    "numpy>=1.24.0",
+    "openai>=1.0.0",
+    "typer>=0.9.0",
+    "pyyaml>=6.0",
+    "matplotlib>=3.7.0",
+    "pandas>=2.0.0",
+    "google-genai>=0.8.0",
+    "uvicorn[standard]>=0.24.0",
+    "fastapi>=0.104.0",
+    "seaborn>=0.12.0",
+    "websockets>=12.0",
+    "stable-baselines3>=2.0.0",
+    "requests>=2.31.0",
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "ruff>=0.0.280",
+    "mypy>=1.4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/scalar/adaptive-alert-triage"
+Documentation = "https://github.com/scalar/adaptive-alert-triage#readme"
+Repository = "https://github.com/scalar/adaptive-alert-triage"
+
+[project.scripts]
+alert-triage = "adaptive_alert_triage.env:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 100
+target-version = ["py39", "py310", "py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=src/adaptive_alert_triage --cov-report=term-missing"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-cov>=7.1.0",
+]

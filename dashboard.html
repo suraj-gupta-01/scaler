@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adaptive Alert Triage — Live Dashboard</title>
+    <meta name="description" content="Real-time RL-powered incident response monitoring dashboard">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-card: #111827;
+            --bg-card-hover: #1a2235;
+            --bg-input: #1e293b;
+            --border: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-blue: #3b82f6;
+            --accent-cyan: #06b6d4;
+            --accent-green: #10b981;
+            --accent-yellow: #f59e0b;
+            --accent-orange: #f97316;
+            --accent-red: #ef4444;
+            --accent-purple: #8b5cf6;
+            --gradient-blue: linear-gradient(135deg, #3b82f6, #06b6d4);
+            --gradient-green: linear-gradient(135deg, #10b981, #06b6d4);
+            --gradient-red: linear-gradient(135deg, #ef4444, #f97316);
+            --gradient-purple: linear-gradient(135deg, #8b5cf6, #ec4899);
+            --shadow-lg: 0 10px 40px rgba(0,0,0,0.4);
+            --shadow-glow-blue: 0 0 20px rgba(59,130,246,0.15);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        body::before {
+            content: '';
+            position: fixed; inset: 0;
+            background:
+                radial-gradient(circle at 20% 30%, rgba(59,130,246,0.05) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(139,92,246,0.05) 0%, transparent 50%);
+            pointer-events: none;
+        }
+        .container { max-width: 1480px; margin: 0 auto; padding: 20px 24px; position: relative; z-index: 1; }
+
+        /* ── Header ─────────────────────────────────────────────── */
+        .header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border);
+        }
+        .header-left { display: flex; align-items: center; gap: 14px; }
+        .logo {
+            width: 42px; height: 42px; background: var(--gradient-blue);
+            border-radius: 12px; display: flex; align-items: center; justify-content: center;
+            font-size: 20px; box-shadow: var(--shadow-glow-blue);
+        }
+        .header h1 {
+            font-size: 20px; font-weight: 700;
+            background: var(--gradient-blue); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .header-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+        .agent-source {
+            padding: 6px 14px; border-radius: 16px; font-size: 11px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.4px;
+        }
+        .agent-source.ppo { background: rgba(139,92,246,0.15); border: 1px solid rgba(139,92,246,0.3); color: var(--accent-purple); }
+        .agent-source.rule { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); color: var(--accent-yellow); }
+        .status-badge {
+            display: flex; align-items: center; gap: 7px;
+            padding: 6px 14px; border-radius: 16px; font-size: 12px; font-weight: 500;
+            background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.2); color: var(--accent-green);
+        }
+        .status-badge.offline { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.2); color: var(--accent-red); }
+        .status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+        /* ── Stat cards ─────────────────────────────────────────── */
+        .grid-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 20px; }
+        .stat-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+            padding: 16px 18px; position: relative; overflow: hidden; transition: all 0.25s;
+        }
+        .stat-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            border-radius: 12px 12px 0 0;
+        }
+        .stat-card:nth-child(1)::before { background: var(--gradient-blue); }
+        .stat-card:nth-child(2)::before { background: var(--gradient-green); }
+        .stat-card:nth-child(3)::before { background: var(--gradient-purple); }
+        .stat-card:nth-child(4)::before { background: var(--gradient-red); }
+        .stat-card:nth-child(5)::before { background: linear-gradient(135deg, #f59e0b, #ef4444); }
+        .stat-card:hover { border-color: rgba(59,130,246,0.3); transform: translateY(-1px); }
+        .stat-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+        .stat-value { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+        .stat-sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+        /* ── Panels ─────────────────────────────────────────────── */
+        .grid-main { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+        .grid-bottom { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+        .panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+        .panel-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 18px; border-bottom: 1px solid var(--border);
+        }
+        .panel-title { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+        .panel-body { padding: 16px 18px; }
+
+        /* ── Reasoning box ──────────────────────────────────────── */
+        .reasoning-box {
+            margin-bottom: 18px;
+        }
+        .reasoning-card {
+            background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.15);
+            border-radius: 10px; padding: 14px 16px;
+        }
+        .reasoning-header {
+            display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+        }
+        .reasoning-label { font-size: 10px; font-weight: 600; color: var(--accent-blue); text-transform: uppercase; letter-spacing: 0.5px; }
+        .reasoning-text { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+        .reasoning-probs {
+            display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;
+        }
+        .prob-bar {
+            flex: 1; min-width: 100px; background: var(--bg-input); border-radius: 6px;
+            padding: 6px 10px; font-size: 10px;
+        }
+        .prob-label { color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; }
+        .prob-fill { height: 3px; border-radius: 2px; margin-top: 4px; transition: width 0.3s; }
+
+        /* ── Alert cards ────────────────────────────────────────── */
+        .alert-list { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; }
+        .alert-list::-webkit-scrollbar { width: 3px; }
+        .alert-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .alert-card {
+            background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px;
+            padding: 12px 14px; display: flex; align-items: center; gap: 12px;
+            transition: all 0.2s; animation: slideIn 0.25s ease-out; cursor: default;
+        }
+        @keyframes slideIn { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
+        .alert-card:hover { border-color: rgba(59,130,246,0.3); background: var(--bg-card-hover); }
+        .severity-indicator {
+            width: 38px; height: 38px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 700; flex-shrink: 0;
+        }
+        .sev-critical { background: rgba(239,68,68,0.15); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.3); }
+        .sev-high { background: rgba(249,115,22,0.15); color: var(--accent-orange); border: 1px solid rgba(249,115,22,0.3); }
+        .sev-medium { background: rgba(245,158,11,0.15); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.3); }
+        .sev-low { background: rgba(16,185,129,0.15); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.3); }
+        .alert-info { flex: 1; min-width: 0; }
+        .alert-id { font-size: 12px; font-weight: 600; }
+        .alert-meta { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+        .alert-type-badge {
+            font-size: 9px; font-weight: 600; padding: 3px 7px; border-radius: 5px;
+            background: rgba(59,130,246,0.1); color: var(--accent-blue);
+            border: 1px solid rgba(59,130,246,0.2); text-transform: uppercase; letter-spacing: 0.3px;
+        }
+        .alert-actions { display: flex; gap: 4px; }
+        .alert-actions .btn { padding: 5px 8px; font-size: 10px; border-radius: 6px; }
+
+        /* ── Action log ─────────────────────────────────────────── */
+        .action-log { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; }
+        .action-log::-webkit-scrollbar { width: 3px; }
+        .action-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .action-entry {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 12px; border-radius: 6px; background: var(--bg-input);
+            font-size: 11px; animation: slideIn 0.15s ease-out;
+        }
+        .action-badge {
+            padding: 3px 8px; border-radius: 5px; font-size: 9px;
+            font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; flex-shrink: 0;
+        }
+        .action-INVESTIGATE { background: rgba(59,130,246,0.15); color: var(--accent-blue); }
+        .action-IGNORE { background: rgba(100,116,139,0.15); color: var(--text-muted); }
+        .action-ESCALATE { background: rgba(245,158,11,0.15); color: var(--accent-yellow); }
+        .action-DELAY { background: rgba(139,92,246,0.15); color: var(--accent-purple); }
+        .action-correct { color: var(--accent-green); }
+        .action-wrong { color: var(--accent-red); }
+
+        /* ── Controls ───────────────────────────────────────────── */
+        .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .btn {
+            padding: 7px 14px; border: 1px solid var(--border); border-radius: 7px;
+            background: var(--bg-input); color: var(--text-primary);
+            font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 500;
+            cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 5px;
+        }
+        .btn:hover { border-color: var(--accent-blue); background: rgba(59,130,246,0.1); }
+        .btn:active { transform: scale(0.97); }
+        .btn-primary { background: var(--gradient-blue); border: none; color: white; font-weight: 600; }
+        .btn-primary:hover { box-shadow: var(--shadow-glow-blue); opacity: 0.9; }
+        .btn-danger { border-color: rgba(239,68,68,0.3); color: var(--accent-red); }
+        .btn-danger:hover { background: rgba(239,68,68,0.1); }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        select {
+            padding: 7px 12px; border: 1px solid var(--border); border-radius: 7px;
+            background: var(--bg-input); color: var(--text-primary);
+            font-family: 'Inter', sans-serif; font-size: 11px; outline: none; cursor: pointer;
+        }
+        select:focus { border-color: var(--accent-blue); }
+
+        /* ── Chart ──────────────────────────────────────────────── */
+        .chart-container { position: relative; height: 200px; }
+
+        /* ── Step bar ───────────────────────────────────────────── */
+        .step-bar { height: 4px; background: var(--bg-input); border-radius: 2px; overflow: hidden; margin-top: 10px; }
+        .step-bar-fill { height: 100%; background: var(--gradient-blue); border-radius: 2px; transition: width 0.3s; }
+        .step-label { font-size: 10px; color: var(--text-muted); margin-top: 3px; text-align: right; }
+
+        /* ── Empty state ────────────────────────────────────────── */
+        .empty-state { text-align: center; padding: 30px 16px; color: var(--text-muted); font-size: 12px; }
+        .empty-state .icon { font-size: 28px; margin-bottom: 8px; opacity: 0.4; }
+
+        /* ── Help section ───────────────────────────────────────── */
+        .help-bar {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px;
+        }
+        .help-item {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 12px 14px; text-align: center;
+        }
+        .help-icon { font-size: 20px; margin-bottom: 4px; }
+        .help-label { font-size: 10px; font-weight: 600; color: var(--accent-blue); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+        .help-desc { font-size: 10px; color: var(--text-muted); line-height: 1.4; }
+
+        /* ── Toast ──────────────────────────────────────────────── */
+        .toast {
+            position: fixed; bottom: 20px; right: 20px;
+            padding: 10px 18px; border-radius: 8px; font-size: 12px; font-weight: 500;
+            z-index: 1000; animation: toastIn 0.25s ease-out; box-shadow: var(--shadow-lg);
+        }
+        .toast-success { background: rgba(16,185,129,0.9); color: white; }
+        .toast-error { background: rgba(239,68,68,0.9); color: white; }
+        .toast-info { background: rgba(59,130,246,0.9); color: white; }
+        @keyframes toastIn { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+
+        @media (max-width:1200px) {
+            .grid-stats { grid-template-columns: repeat(3, 1fr); }
+            .grid-main, .grid-bottom { grid-template-columns: 1fr; }
+            .help-bar { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- ══════ Header ══════ -->
+    <div class="header">
+        <div class="header-left">
+            <div class="logo">🛡️</div>
+            <div>
+                <h1>Adaptive Alert Triage</h1>
+                <div class="header-subtitle">RL-Powered Incident Response Dashboard</div>
+            </div>
+        </div>
+        <div class="header-right">
+            <div id="agentSource" class="agent-source rule">Rule-Based</div>
+            <div id="statusBadge" class="status-badge offline">
+                <div class="status-dot"></div>
+                <span id="statusText">Connecting…</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════ Action Guide ══════ -->
+    <div class="help-bar">
+        <div class="help-item">
+            <div class="help-icon">🔍</div>
+            <div class="help-label">Investigate</div>
+            <div class="help-desc">Deep-dive diagnosis. Uses 1 budget slot. For high-severity, high-confidence alerts.</div>
+        </div>
+        <div class="help-item">
+            <div class="help-icon">🚫</div>
+            <div class="help-label">Ignore</div>
+            <div class="help-desc">Dismiss as noise. For low-confidence or known false positives. Saves resources.</div>
+        </div>
+        <div class="help-item">
+            <div class="help-icon">⬆️</div>
+            <div class="help-label">Escalate</div>
+            <div class="help-desc">Route to specialist team. No budget cost. For uncertain but severe alerts.</div>
+        </div>
+        <div class="help-item">
+            <div class="help-icon">⏳</div>
+            <div class="help-label">Delay</div>
+            <div class="help-desc">Defer to next step. Wait for more info. Risky for critical alerts!</div>
+        </div>
+    </div>
+
+    <!-- ══════ Stat Cards ══════ -->
+    <div class="grid-stats">
+        <div class="stat-card">
+            <div class="stat-label">Active Alerts</div>
+            <div class="stat-value" id="statAlerts">—</div>
+            <div class="stat-sub" id="statQueue">Queue: 0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Accuracy</div>
+            <div class="stat-value" id="statAccuracy">—</div>
+            <div class="stat-sub" id="statCorrect">0 correct / 0 total</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Total Reward</div>
+            <div class="stat-value" id="statReward">0.0</div>
+            <div class="stat-sub" id="statAvgReward">avg: —</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Failures</div>
+            <div class="stat-value" id="statFailures">0</div>
+            <div class="stat-sub" id="statFailThresh">system crashes</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Episode</div>
+            <div class="stat-value" id="statStep">—</div>
+            <div class="stat-sub" id="statTask">Select task →</div>
+        </div>
+    </div>
+
+    <!-- ══════ AI Reasoning ══════ -->
+    <div class="reasoning-box">
+        <div class="reasoning-card">
+            <div class="reasoning-header">
+                <span style="font-size:14px">🧠</span>
+                <span class="reasoning-label">AI Agent Reasoning</span>
+                <span id="reasoningSource" style="font-size:10px; color:var(--text-muted); margin-left:auto;">Waiting for episode…</span>
+            </div>
+            <div class="reasoning-text" id="reasoningText">
+                Start a new episode to see the agent's real-time decision explanations. The agent analyzes each alert's
+                severity, confidence, type, and age to determine the optimal triage action.
+            </div>
+            <div class="reasoning-probs" id="reasoningProbs" style="display:none">
+                <div class="prob-bar">
+                    <div class="prob-label">Investigate</div>
+                    <div class="prob-fill" id="probInv" style="background:var(--accent-blue);width:0%"></div>
+                    <span id="probInvVal" style="font-size:10px;color:var(--text-muted)">—</span>
+                </div>
+                <div class="prob-bar">
+                    <div class="prob-label">Ignore</div>
+                    <div class="prob-fill" id="probIgn" style="background:var(--text-muted);width:0%"></div>
+                    <span id="probIgnVal" style="font-size:10px;color:var(--text-muted)">—</span>
+                </div>
+                <div class="prob-bar">
+                    <div class="prob-label">Escalate</div>
+                    <div class="prob-fill" id="probEsc" style="background:var(--accent-yellow);width:0%"></div>
+                    <span id="probEscVal" style="font-size:10px;color:var(--text-muted)">—</span>
+                </div>
+                <div class="prob-bar">
+                    <div class="prob-label">Delay</div>
+                    <div class="prob-fill" id="probDel" style="background:var(--accent-purple);width:0%"></div>
+                    <span id="probDelVal" style="font-size:10px;color:var(--text-muted)">—</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════ Main Grid ══════ -->
+    <div class="grid-main">
+        <!-- Active Alerts -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">📋 Active Alerts</div>
+                <div class="controls">
+                    <select id="taskSelect">
+                        <option value="easy">🟢 Easy</option>
+                        <option value="medium">🟡 Medium</option>
+                        <option value="hard" selected>🔴 Hard</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="resetEpisode()" id="resetBtn">▶ New Episode</button>
+                    <button class="btn" onclick="stepOnce()" id="stepBtn" disabled>⏭ Step</button>
+                    <button class="btn" onclick="autoPlay()" id="autoBtn" disabled>⚡ Auto</button>
+                </div>
+            </div>
+            <div class="panel-body">
+                <div id="alertList" class="alert-list">
+                    <div class="empty-state">
+                        <div class="icon">📭</div>
+                        <div>No alerts — click <strong>▶ New Episode</strong> to begin</div>
+                    </div>
+                </div>
+                <div class="step-bar"><div class="step-bar-fill" id="stepBar" style="width:0%"></div></div>
+                <div class="step-label" id="stepLabel">Step 0 / 0</div>
+            </div>
+        </div>
+
+        <!-- Action Log -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">⚡ Decision Log</div>
+                <div class="controls">
+                    <span id="logCount" style="font-size:11px;color:var(--text-muted)">0 actions</span>
+                    <button class="btn btn-danger" onclick="clearLog()">Clear</button>
+                </div>
+            </div>
+            <div class="panel-body">
+                <div id="actionLog" class="action-log">
+                    <div class="empty-state">
+                        <div class="icon">📝</div>
+                        <div>Agent decisions appear here with reasoning</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════ Bottom Charts ══════ -->
+    <div class="grid-bottom">
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">📊 Episode Scores</div>
+                <span id="avgScore" style="font-size:11px;color:var(--text-muted)">avg: —</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-container"><canvas id="scoreChart"></canvas></div>
+            </div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">📈 Reward Trend</div>
+                <span id="avgRewardLabel" style="font-size:11px;color:var(--text-muted)">cumulative</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-container"><canvas id="rewardChart"></canvas></div>
+            </div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">🎯 Action Distribution</div>
+            </div>
+            <div class="panel-body">
+                <div class="chart-container"><canvas id="actionChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════════════════════════
+const SERVER = 'http://localhost:8000';
+let currentAlerts = [];
+let episodeScores = [];
+let episodeRewards = [];
+let rewardTimeline = [];   // per-step cumulative
+let actionCounts = { INVESTIGATE:0, IGNORE:0, ESCALATE:0, DELAY:0 };
+let episodeDone = true;
+let autoPlaying = false;
+let currentStep = 0, maxSteps = 50;
+let correctCount = 0, totalSteps = 0, totalReward = 0;
+let currentTask = 'hard';
+let agentSource = 'rule_based';
+
+// ═══════════════════════════════════════════════════════════════════
+// Charts
+// ═══════════════════════════════════════════════════════════════════
+const chartFont = { family: 'Inter', size: 11 };
+const gridColor = 'rgba(255,255,255,0.04)';
+const tickColor = '#64748b';
+
+const scoreChart = new Chart(document.getElementById('scoreChart'), {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [
+            { label: 'Score', data: [], borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)',
+              fill: true, tension: 0.4, pointRadius: 4, pointBackgroundColor: '#3b82f6', borderWidth: 2 },
+            { label: 'Threshold', data: [], borderColor: 'rgba(239,68,68,0.5)',
+              borderDash: [6,3], borderWidth: 1.5, pointRadius: 0, fill: false }
+        ]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { y: { min:0, max:1, grid:{color:gridColor}, ticks:{color:tickColor,font:chartFont} }, x: { grid:{display:false}, ticks:{color:tickColor,font:chartFont} } },
+        plugins: { legend: { labels: { color:'#94a3b8', font:chartFont } } }
+    }
+});
+
+const rewardChart = new Chart(document.getElementById('rewardChart'), {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [
+            { label: 'Cumulative Reward', data: [], borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)',
+              fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2 }
+        ]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { y: { grid:{color:gridColor}, ticks:{color:tickColor,font:chartFont} }, x: { grid:{display:false}, ticks:{color:tickColor,font:chartFont,maxTicksLimit:10} } },
+        plugins: { legend: { labels: { color:'#94a3b8', font:chartFont } } }
+    }
+});
+
+const actionChart = new Chart(document.getElementById('actionChart'), {
+    type: 'doughnut',
+    data: {
+        labels: ['Investigate', 'Ignore', 'Escalate', 'Delay'],
+        datasets: [{ data: [1,1,1,1], backgroundColor: ['rgba(59,130,246,0.8)','rgba(100,116,139,0.5)','rgba(245,158,11,0.8)','rgba(139,92,246,0.8)'], borderColor: '#111827', borderWidth: 3 }]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false, cutout: '62%',
+        plugins: { legend: { position:'bottom', labels: { color:'#94a3b8', font:chartFont, padding:10 } } }
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// API
+// ═══════════════════════════════════════════════════════════════════
+async function api(method, path, body=null) {
+    const opts = { method, headers: {'Content-Type':'application/json'} };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch(`${SERVER}${path}`, opts);
+    return r.json();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Polling
+// ═══════════════════════════════════════════════════════════════════
+async function pollHealth() {
+    try {
+        const h = await api('GET', '/health');
+        const badge = document.getElementById('statusBadge');
+        const text  = document.getElementById('statusText');
+        if (h.status === 'ok') { badge.className = 'status-badge'; text.textContent = 'Server Online'; }
+        else throw 0;
+    } catch { document.getElementById('statusBadge').className = 'status-badge offline'; document.getElementById('statusText').textContent = 'Offline'; }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Episode
+// ═══════════════════════════════════════════════════════════════════
+async function resetEpisode() {
+    currentTask = document.getElementById('taskSelect').value;
+    try {
+        const data = await api('POST', `/env/reset/${currentTask}`);
+        if (data.error) { showToast(data.error, 'error'); return; }
+        const obs = data.obs;
+        currentAlerts = obs.alerts || [];
+        currentStep = obs.episode_step || 0;
+        maxSteps = (obs.time_remaining || 50) + currentStep;
+        episodeDone = false;
+        correctCount = 0; totalSteps = 0; totalReward = 0;
+        rewardTimeline = [];
+        actionCounts = { INVESTIGATE:0, IGNORE:0, ESCALATE:0, DELAY:0 };
+        renderAlerts();
+        updateUI();
+        document.getElementById('stepBtn').disabled = false;
+        document.getElementById('autoBtn').disabled = false;
+        document.getElementById('statTask').textContent = `Task: ${currentTask.toUpperCase()}`;
+        document.getElementById('reasoningText').textContent = 'Episode started. Agent is analyzing the first set of alerts…';
+        document.getElementById('reasoningProbs').style.display = 'none';
+        // Fetch initial recommendation
+        fetchRecommendation();
+        showToast(`New ${currentTask} episode started`, 'info');
+    } catch(e) { showToast('Cannot connect to server', 'error'); }
+}
+
+async function fetchRecommendation() {
+    try {
+        const rec = await api('GET', '/agent/recommend');
+        if (rec.error) return;
+        agentSource = rec.source || 'rule_based';
+        // Update source badge
+        const badge = document.getElementById('agentSource');
+        if (agentSource === 'trained_ppo') {
+            badge.className = 'agent-source ppo'; badge.textContent = '🧠 Trained PPO';
+        } else {
+            badge.className = 'agent-source rule'; badge.textContent = '📏 Rule-Based';
+        }
+        // Update reasoning
+        document.getElementById('reasoningText').textContent = rec.reasoning || '';
+        document.getElementById('reasoningSource').textContent =
+            agentSource === 'trained_ppo'
+                ? `PPO Model • Value: ${rec.value_estimate ?? '—'}`
+                : 'Rule-Based Policy';
+        // Update probability bars if available
+        const probsDiv = document.getElementById('reasoningProbs');
+        if (rec.probabilities) {
+            probsDiv.style.display = 'flex';
+            for (const [key, id, colorVar] of [['INVESTIGATE','Inv','--accent-blue'],['IGNORE','Ign','--text-muted'],['ESCALATE','Esc','--accent-yellow'],['DELAY','Del','--accent-purple']]) {
+                const val = rec.probabilities[key] || 0;
+                const pct = (val * 100).toFixed(1);
+                document.getElementById(`prob${id}`).style.width = `${val * 100}%`;
+                document.getElementById(`prob${id}Val`).textContent = `${pct}%`;
+            }
+        } else { probsDiv.style.display = 'none'; }
+        return rec;
+    } catch { return null; }
+}
+
+async function stepOnce() {
+    if (episodeDone || !currentAlerts.length) return false;
+    // Get recommendation from server (uses trained weights or rule-based)
+    const rec = await fetchRecommendation();
+    if (!rec || rec.error) {
+        showToast('No recommendation available', 'error');
+        return false;
+    }
+    return await executeAction(rec.alert_id, rec.action_type, rec.reasoning);
+}
+
+async function executeAction(alertId, actionType, reasoning) {
+    if (episodeDone) return false;
+    const alert = currentAlerts.find(a => a.id === alertId);
+    try {
+        const data = await api('POST', '/env/step', { alert_id: alertId, action_type: actionType });
+        if (data.error) { showToast(data.error, 'error'); return false; }
+        const info = data.info || {};
+        totalSteps++;
+        const isCorrect = info.action_correct || false;
+        if (isCorrect) correctCount++;
+        const reward = typeof data.reward === 'number' ? data.reward : 0;
+        totalReward += reward;
+        rewardTimeline.push(totalReward);
+        actionCounts[actionType]++;
+        // Log
+        addActionEntry(alertId, actionType, reward, isCorrect, alert, reasoning);
+        // Update state
+        currentAlerts = (data.obs && data.obs.alerts) || [];
+        currentStep = (data.obs && data.obs.episode_step) || currentStep + 1;
+        document.getElementById('statFailures').textContent = info.failures_count ?? 0;
+        renderAlerts();
+        updateUI();
+        updateRewardChart();
+        updateActionChart();
+        if (data.done) {
+            episodeDone = true;
+            const score = totalSteps > 0 ? correctCount / totalSteps : 0;
+            episodeScores.push(score);
+            episodeRewards.push(totalReward);
+            updateScoreChart();
+            document.getElementById('stepBtn').disabled = true;
+            document.getElementById('autoBtn').disabled = true;
+            document.getElementById('reasoningText').textContent =
+                `Episode complete! Final accuracy: ${(score*100).toFixed(1)}% (${correctCount}/${totalSteps} correct). `+
+                `Total reward: ${totalReward.toFixed(1)}. ${score >= 0.5 ? '✅ Good performance!' : '⚠️ Below threshold — agent needs more training.'}`;
+            showToast(`Episode done — accuracy: ${(score*100).toFixed(1)}%`, score >= 0.5 ? 'success' : 'error');
+            return false;
+        }
+        // Fetch next recommendation
+        fetchRecommendation();
+        return true;
+    } catch(e) { showToast('Step failed: '+e.message, 'error'); return false; }
+}
+
+async function autoPlay() {
+    if (autoPlaying) { autoPlaying = false; document.getElementById('autoBtn').textContent = '⚡ Auto'; return; }
+    if (episodeDone) await resetEpisode();
+    autoPlaying = true;
+    document.getElementById('autoBtn').textContent = '⏸ Pause';
+    while (autoPlaying && !episodeDone) {
+        const ok = await stepOnce();
+        if (!ok) break;
+        await new Promise(r => setTimeout(r, 300));
+    }
+    autoPlaying = false;
+    document.getElementById('autoBtn').textContent = '⚡ Auto';
+}
+
+async function manualAction(alertId, actionType) {
+    if (episodeDone) return;
+    await executeAction(alertId, actionType, `Manual: ${actionType} on ${alertId}`);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Rendering
+// ═══════════════════════════════════════════════════════════════════
+function sevClass(s) { return s >= 0.75 ? 'sev-critical' : s >= 0.55 ? 'sev-high' : s >= 0.30 ? 'sev-medium' : 'sev-low'; }
+function sevLabel(s) { return s >= 0.75 ? 'CRIT' : s >= 0.55 ? 'HIGH' : s >= 0.30 ? 'MED' : 'LOW'; }
+
+function renderAlerts() {
+    const list = document.getElementById('alertList');
+    document.getElementById('statAlerts').textContent = currentAlerts.length;
+    if (!currentAlerts.length) {
+        list.innerHTML = '<div class="empty-state"><div class="icon">📭</div><div>No active alerts</div></div>';
+        return;
+    }
+    list.innerHTML = currentAlerts.map(a => {
+        const s = a.visible_severity, c = a.confidence;
+        return `<div class="alert-card">
+            <div class="severity-indicator ${sevClass(s)}" title="Severity: ${s.toFixed(2)}">
+                ${sevLabel(s)}
+            </div>
+            <div class="alert-info">
+                <div class="alert-id">${a.id}</div>
+                <div class="alert-meta">sev: ${s.toFixed(2)} · conf: ${c.toFixed(2)} · age: ${a.age}</div>
+            </div>
+            <div class="alert-type-badge">${a.alert_type || a.type || '?'}</div>
+            <div class="alert-actions">
+                <button class="btn" onclick="manualAction('${a.id}','INVESTIGATE')" title="Investigate this alert">🔍</button>
+                <button class="btn" onclick="manualAction('${a.id}','IGNORE')" title="Dismiss as noise">🚫</button>
+                <button class="btn" onclick="manualAction('${a.id}','ESCALATE')" title="Escalate to specialists">⬆️</button>
+                <button class="btn" onclick="manualAction('${a.id}','DELAY')" title="Defer decision">⏳</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function addActionEntry(alertId, actionType, reward, correct, alert, reasoning) {
+    const log = document.getElementById('actionLog');
+    if (log.querySelector('.empty-state')) log.innerHTML = '';
+    const el = document.createElement('div');
+    el.className = 'action-entry';
+    const sev = alert ? alert.visible_severity?.toFixed(2) : '?';
+    const r = typeof reward === 'number' ? reward.toFixed(1) : '?';
+    el.innerHTML = `
+        <span class="action-badge action-${actionType}">${actionType}</span>
+        <span style="color:var(--text-secondary);flex-shrink:0">${alertId}</span>
+        <span style="color:var(--text-muted);font-size:10px">sev:${sev}</span>
+        <span style="color:${reward >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'};font-size:10px;font-weight:600">r:${r}</span>
+        <span class="action-result ${correct ? 'action-correct' : 'action-wrong'}" style="margin-left:auto;font-weight:600">${correct ? '✓ correct' : '✗ wrong'}</span>
+    `;
+    log.prepend(el);
+    while (log.children.length > 80) log.removeChild(log.lastChild);
+    document.getElementById('logCount').textContent = `${totalSteps} actions`;
+}
+
+function clearLog() {
+    document.getElementById('actionLog').innerHTML = '<div class="empty-state"><div class="icon">📝</div><div>Cleared</div></div>';
+}
+
+function updateUI() {
+    // Step bar
+    const pct = maxSteps > 0 ? (currentStep / maxSteps) * 100 : 0;
+    document.getElementById('stepBar').style.width = pct + '%';
+    document.getElementById('stepLabel').textContent = `Step ${currentStep} / ${maxSteps}`;
+    document.getElementById('statStep').textContent = `${currentStep}/${maxSteps}`;
+    // Accuracy
+    const acc = totalSteps > 0 ? (correctCount / totalSteps * 100) : 0;
+    document.getElementById('statAccuracy').textContent = totalSteps > 0 ? `${acc.toFixed(1)}%` : '—';
+    document.getElementById('statCorrect').textContent = `${correctCount} correct / ${totalSteps} total`;
+    // Reward
+    document.getElementById('statReward').textContent = totalReward.toFixed(1);
+    document.getElementById('statAvgReward').textContent = totalSteps > 0 ? `avg: ${(totalReward/totalSteps).toFixed(2)}/step` : 'avg: —';
+}
+
+function updateScoreChart() {
+    const thresholds = { easy: 0.70, medium: 0.55, hard: 0.50 };
+    const thresh = thresholds[currentTask] || 0.50;
+    scoreChart.data.labels = episodeScores.map((_,i) => `Ep ${i+1}`);
+    scoreChart.data.datasets[0].data = episodeScores;
+    scoreChart.data.datasets[1].data = episodeScores.map(() => thresh);
+    scoreChart.update('none');
+    const avg = episodeScores.length ? (episodeScores.reduce((a,b)=>a+b,0)/episodeScores.length) : 0;
+    document.getElementById('avgScore').textContent = `avg: ${avg.toFixed(3)} over ${episodeScores.length} episodes`;
+}
+
+function updateRewardChart() {
+    rewardChart.data.labels = rewardTimeline.map((_,i) => i+1);
+    rewardChart.data.datasets[0].data = rewardTimeline;
+    rewardChart.update('none');
+}
+
+function updateActionChart() {
+    const vals = [actionCounts.INVESTIGATE, actionCounts.IGNORE, actionCounts.ESCALATE, actionCounts.DELAY];
+    const total = vals.reduce((a,b)=>a+b,0);
+    actionChart.data.datasets[0].data = total > 0 ? vals : [1,1,1,1];
+    actionChart.update('none');
+}
+
+function showToast(msg, type='success') {
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════════════════════════════
+pollHealth();
+setInterval(pollHealth, 5000);
+</script>
+</body>
+</html>

@@ -1,0 +1,278 @@
+# openenv.yaml — OpenEnv Specification for Adaptive Alert Triage
+# Matches the actual implementation in src/adaptive_alert_triage/
+# Validated against: env.py, models.py, tasks/easy.py, tasks/medium.py, tasks/hard.py
+
+name: "AdaptiveAlertTriage"
+version: "0.1.0"
+description: |
+  A partially-observable RL environment that simulates real-time IT alert triage
+  and incident response.  An agent receives a continuous stream of system alerts
+  and must decide — for each one — whether to INVESTIGATE, IGNORE, ESCALATE, or
+  DELAY, under time pressure, resource constraints, and the risk of cascading
+  failures from unhandled correlated alerts.
+
+  This environment models a task performed daily by DevOps and SOC engineers:
+  triaging noisy monitoring signals while preventing real incidents from
+  escalating into outages.
+
+authors:
+  - name: "Scalar Hackathon Team"
+    email: "team@scalar.com"
+
+license: "MIT"
+
+tags:
+  - reinforcement-learning
+  - openenv
+  - alert-triage
+  - incident-response
+  - partial-observability
+  - resource-constraints
+  - cascading-failures
+
+# ── Environment class ─────────────────────────────────────────────────────────
+environment:
+  module: "adaptive_alert_triage.env"
+  class: "AdaptiveAlertTriageEnv"
+  # Constructor accepts: task_id ("easy"|"medium"|"hard"), seed (int, optional)
+
+# ── OpenEnv interface ─────────────────────────────────────────────────────────
+# All three methods are implemented in AdaptiveAlertTriageEnv
+interface:
+  reset:
+    signature: "reset(seed=None, options=None) -> Observation"
+    description: |
+      Resets the episode.  Generates an initial batch of synthetic alerts
+      using the task-specific correlation_probability.  Returns an Observation
+      with alerts stripped of hidden fields (true_severity, is_correlated).
+  step:
+    signature: "step(action: Action) -> (Observation, Reward, done: bool, info: dict)"
+    description: |
+      Processes one Action, updates alert queue, checks for failures, generates
+      new alerts, and returns the next observation.  The info dict always
+      contains: processed_alerts, correlation_groups, failures_this_step,
+      system_failure, action_correct, cumulative_reward, step, failures_count.
+  state:
+    signature: "state() -> EpisodeState"
+    description: |
+      Returns the full internal EpisodeState including hidden ground-truth
+      (true_severities, correlation_groups, false_positives, pending_failures).
+      For evaluation and replay only — never exposed to the agent during training.
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+config:
+  actions:
+    - "INVESTIGATE"
+    - "IGNORE"
+    - "ESCALATE"
+    - "DELAY"
+
+# ── Observation space ─────────────────────────────────────────────────────────
+observation:
+  type: "Pydantic BaseModel (Observation)"
+  fields:
+    alerts:
+      type: "List[Alert]"
+      description: "Active alerts awaiting triage. Each Alert has id, visible_severity, confidence, alert_type, age."
+      hidden_fields: "true_severity, is_correlated — stripped before returned to agent"
+    system_load:
+      type: "float [0.0, 1.0]"
+      description: "Current infrastructure utilisation"
+    queue_length:
+      type: "int >= 0"
+      description: "Number of active alerts in queue"
+    time_remaining:
+      type: "int >= 0"
+      description: "Steps left before episode ends"
+    episode_step:
+      type: "int >= 0"
+      description: "Current step index (0-based)"
+    resource_budget:
+      type: "Optional[int]"
+      description: "Remaining INVESTIGATE actions this step. None = unconstrained (easy task)."
+
+# ── Action space ──────────────────────────────────────────────────────────────
+action:
+  type: "Pydantic BaseModel (Action)"
+  fields:
+    alert_id:
+      type: "str"
+      description: "ID of the target alert — must match an ID in current observation.alerts"
+    action_type:
+      type: "Literal['INVESTIGATE','IGNORE','ESCALATE','DELAY']"
+      description: |
+        INVESTIGATE — allocates resources to diagnose; counts against resource_budget
+        IGNORE      — dismisses alert as noise (best for false positives)
+        ESCALATE    — routes to specialist team (no budget cost)
+        DELAY       — keeps alert in queue for re-evaluation next step
+    metadata:
+      type: "Dict[str, Any]"
+      description: "Optional context bag (e.g. reasoning from LLM agents)"
+
+# ── Reward ────────────────────────────────────────────────────────────────────
+reward:
+  type: "Pydantic BaseModel (Reward)"
+  description: "Dense, shaped reward decomposed into named components"
+  schedule:
+    critical_handled: "+10.0  — INVESTIGATE or ESCALATE on critical alert (true_severity >= 0.75)"
+    failure_prevented: "+5.0   — correlated alert handled (prevents cascade)"
+    false_positive_ignored: "+3.0   — IGNORE on a false positive"
+    medium_handled: "+2.0 * true_severity  — INVESTIGATE on medium alert"
+    unnecessary_invest: "-2.0   — INVESTIGATE on a false positive"
+    missed_critical: "-8.0   — IGNORE on a critical alert"
+    risky_delay: "-2.4   — DELAY on a critical alert"
+    task_multipliers: "easy=1.0, medium=1.1, hard=1.2"
+  range: [-8.0, 15.0] # per step before task multiplier; cascade bonus included in max
+
+# ── Tasks ─────────────────────────────────────────────────────────────────────
+tasks:
+  - id: "easy"
+    name: "Basic Alert Prioritisation"
+    description: |
+      Classify and respond to independent alerts with no resource constraint.
+      The agent must learn to INVESTIGATE/ESCALATE critical alerts
+      (true_severity >= 0.75) and IGNORE false positives (< 0.30).
+      DELAY is always wrong in this task.
+    difficulty: 1
+    max_steps: 30
+    failure_threshold: 5
+    max_investigations_per_step: null # unconstrained
+    correlation_probability: 0.10
+    success_threshold: 0.70 # correct_actions / total_actions >= 0.70
+    grader: "tasks.easy.EasyTaskGrader"
+    grading_formula: "score = correct_actions / total_actions"
+
+  - id: "medium"
+    name: "Resource-Constrained Triage"
+    description: |
+      Triage under a hard per-step investigation budget of K=3.
+      Agent must prioritise high-value investigations over false positives
+      and use ESCALATE when budget is exhausted.  Grader penalises wasting
+      budget on FPs and missing critical alerts.
+    difficulty: 2
+    max_steps: 40
+    failure_threshold: 5
+    max_investigations_per_step: 3
+    correlation_probability: 0.20
+    success_threshold: 0.55
+    grader: "tasks.medium.MediumTaskGrader"
+    grading_formula: |
+      raw = resolved_score / max_possible_score
+      score = max(0, raw - fp_penalty(0.30) - critical_miss_penalty(0.20))
+
+  - id: "hard"
+    name: "Cascading Failure Prevention"
+    description: |
+      Detect and stop correlated alert chains before they cascade into
+      system failures.  Chains arrive sequentially: trigger at step N,
+      child at step N+k if trigger was missed.  Agent cannot observe
+      is_correlated — must infer from visible patterns.  Stability
+      multiplier drops sharply with each system failure.
+    difficulty: 3
+    max_steps: 50
+    failure_threshold: 3 # stricter than easy/medium
+    max_investigations_per_step: 3
+    correlation_probability: 0.40
+    success_threshold: 0.50
+    grader: "tasks.hard.HardTaskGrader"
+    grading_formula: |
+      chain_score = Σ stop_reward(position) × severity_weight
+      stability   = {0 failures: 1.0, 1: 0.80, 2: 0.60, 3: 0.30, 4+: 0.00}
+      score       = min(chain_score / max_possible * stability, 1.0)
+
+# ── Evaluation metrics (produced by graders) ──────────────────────────────────
+metrics:
+  - name: "correct_action_rate"
+    description: "Fraction of actions matching the optimal ground-truth policy"
+    range: [0.0, 1.0]
+    tasks: ["easy"]
+
+  - name: "resolved_score"
+    description: "Weighted resolution quality normalised by max possible"
+    range: [0.0, 1.0]
+    tasks: ["medium"]
+
+  - name: "resource_efficiency"
+    description: "Ratio of productive investigations to total INVESTIGATE actions"
+    range: [0.0, 1.0]
+    tasks: ["medium"]
+
+  - name: "chain_detection_rate"
+    description: "Fraction of correlated chains stopped before system failure"
+    range: [0.0, 1.0]
+    tasks: ["hard"]
+
+  - name: "system_failures"
+    description: "Number of system failures triggered (lower is better)"
+    range: [0, 10]
+    tasks: ["hard"]
+
+  - name: "stability_score"
+    description: "Stability multiplier based on failure count"
+    range: [0.0, 1.0]
+    tasks: ["hard"]
+
+# ── Baseline agents ───────────────────────────────────────────────────────────
+baselines:
+  - name: "rule_based"
+    module: "agents.baseline"
+    class: "RuleBasedAgent"
+    type: "threshold"
+    description: "Simple severity/confidence thresholding policy"
+    scores:
+      easy: 0.539
+      medium: 0.618
+      hard: 0.355
+
+  - name: "improved_rule_based"
+    module: "agents.baseline"
+    class: "ImprovedRuleBasedAgent"
+    type: "threshold"
+    description: "Rule-based with age-urgency, system-load awareness, resource budget guard"
+    scores:
+      easy: 0.250
+      medium: 0.355
+      hard: 0.068
+
+  - name: "ppo_lstm"
+    module: "rl_agent"
+    class: "PPOTrainer"
+    type: "rl"
+    description: "PPO with LSTM memory — pure numpy, trained 300+ episodes per task"
+    scores:
+      easy: 0.665
+      medium: 0.931
+      hard: 0.325
+
+  - name: "llm_openai"
+    module: "inference"
+    class: "LLMTriageAgent"
+    type: "llm"
+    description: "OpenAI-compatible LLM agent via API_BASE_URL / MODEL_NAME / HF_TOKEN"
+
+# ── Infra / Docker ────────────────────────────────────────────────────────────
+docker:
+  image: "adaptive-alert-triage:latest"
+  build: "docker build -t adaptive-alert-triage ."
+  run: "docker run -p 8000:8000 adaptive-alert-triage"
+  entrypoint: "uvicorn src.adaptive_alert_triage.server:app --host 0.0.0.0 --port 8000"
+
+# ── Setup and validation ──────────────────────────────────────────────────────
+setup:
+  python: ">=3.9"
+  install: "pip install -e ."
+  pythonpath: "src"
+  test: "pytest tests/"
+  validate: "openenv validate"
+  baseline: "python inference.py --n 3"
+
+api_version: "1.0"
+framework: "openenv"
+
+documentation:
+  readme: "README.md"
+  baseline: "inference.py"
+  agents: "agents/"
+  tasks: "tasks/"
+  api_docs: "src/adaptive_alert_triage/"
+  server: "src/adaptive_alert_triage/server.py"

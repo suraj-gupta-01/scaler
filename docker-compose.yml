@@ -1,0 +1,35 @@
+# Docker Compose for Adaptive Alert Triage RL Server
+# 
+# Usage:
+#   docker compose up --build -d      # Start server in background
+#   docker compose logs -f            # View logs
+#   docker compose down               # Stop server
+#
+# The server exposes an OpenEnv-compatible REST API for remote RL training.
+
+version: "3.9"
+
+services:
+  triage-rl:
+    build: .
+    container_name: triage-rl
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    volumes:
+      # Optional: Mount for live development (uncomment for dev mode)
+      # - ./src:/app/src:ro
+      # - ./evaluation:/app/evaluation:ro
+      - ./models:/app/models  # Persist trained models
+    labels:
+      - "com.scalar.hackathon=adaptive-alert-triage"
+      - "com.scalar.version=0.1.0"
