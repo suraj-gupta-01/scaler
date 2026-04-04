@@ -1,27 +1,36 @@
-# Docker Compose for Adaptive Alert Triage RL Server
-# 
+# Docker Compose for Adaptive Alert Triage
+#
 # Usage:
 #   docker compose up --build -d      # Start server in background
 #   docker compose logs -f            # View logs
 #   docker compose down               # Stop server
 #
-# The server exposes an OpenEnv-compatible REST API for remote RL training.
+# The server exposes a FastAPI REST API for alert triage inference.
+#
+# Environment variables (set in .env or export before running):
+#   API_BASE_URL  — LLM endpoint  (default: https://api.openai.com/v1)
+#   MODEL_NAME    — LLM model name (default: gpt-4o-mini)
+#   HF_TOKEN      — Hugging Face / OpenAI API key
+#   PORT          — Server port   (default: 7860)
 
 version: "3.9"
 
 services:
-  triage-rl:
+  triage-server:
     build: .
-    container_name: triage-rl
+    container_name: triage-server
     ports:
-      - "8000:8000"
+      - "${PORT:-7860}:${PORT:-7860}"
     environment:
       - PYTHONUNBUFFERED=1
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - API_BASE_URL=${API_BASE_URL:-https://api.openai.com/v1}
+      - MODEL_NAME=${MODEL_NAME:-gpt-4o-mini}
+      - HF_TOKEN=${HF_TOKEN:-}
+      - PORT=${PORT:-7860}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 10s
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-7860}/health"]
+      interval: 15s
       timeout: 5s
       retries: 3
       start_period: 30s
@@ -29,7 +38,8 @@ services:
       # Optional: Mount for live development (uncomment for dev mode)
       # - ./src:/app/src:ro
       # - ./evaluation:/app/evaluation:ro
-      - ./models:/app/models  # Persist trained models
+      - ./weights:/app/weights  # Persist model weights
+      - ./results:/app/results  # Persist inference results
     labels:
       - "com.scalar.hackathon=adaptive-alert-triage"
       - "com.scalar.version=0.1.0"
