@@ -38,6 +38,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from .env    import AdaptiveAlertTriageEnv
@@ -548,6 +549,20 @@ async def root():
             "4. curl localhost:8000/agent/recommend",
         ],
     }
+
+
+@app.get("/web")
+async def web_ui():
+    """
+    Serves the interactive web dashboard for real-time monitoring.
+    OpenEnv-compliant: Matches HF Spaces `/web` endpoint convention.
+    """
+    import os
+    dashboard_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        "dashboard.html"
+    )
+    return FileResponse(dashboard_path, media_type="text/html")
 
 
 @app.get("/tasks")
