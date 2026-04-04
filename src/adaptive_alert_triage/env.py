@@ -43,17 +43,17 @@ from collections import deque
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
-import openenv as gym
-from openenv import spaces
+import openenv_shim as gym
+from openenv_shim import spaces
 
-from .models import (
+from adaptive_alert_triage.models import (
     Action,
     Alert,
     EpisodeState,
     Observation,
     Reward,
 )
-from . import utils
+from adaptive_alert_triage import utils
 
 # Import reward calculation with graceful fallback for development mode
 import os as _os

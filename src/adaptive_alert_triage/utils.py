@@ -17,7 +17,7 @@ from typing import List, Dict, Tuple, Optional
 
 import numpy as np
 
-from .models import Alert, AlertType
+from adaptive_alert_triage.models import Alert, AlertType
 
 
 # ---------------------------------------------------------------------------
