@@ -1,10 +1,9 @@
 # requirements.txt — Adaptive Alert Triage
-# Generated from pyproject.toml dependencies
+# Server-only dependencies (matches pyproject.toml core deps)
 # Designed for 2 vCPU / 8 GB RAM (HF Spaces free tier)
 # No PyTorch / TensorFlow — RL agent is pure numpy
 
 # ── Core environment ──────────────────────────────────────────────────────────
-openenv>=0.1.0
 numpy>=1.24.0
 pydantic>=2.0.0
 
@@ -16,26 +15,8 @@ websockets>=12.0
 # ── LLM inference (OpenAI client — required by checklist) ────────────────────
 openai>=1.0.0
 
-# ── Gemini SDK (legacy inference.py in agents/ still uses it) ────────────────
-google-genai>=0.8.0
-
 # ── HTTP client (train_external.py, real-alert listener) ─────────────────────
 requests>=2.31.0
 
-# ── Data / plotting ───────────────────────────────────────────────────────────
-matplotlib>=3.7.0
-pandas>=2.0.0
-seaborn>=0.12.0
-
 # ── YAML parsing ─────────────────────────────────────────────────────────────
 pyyaml>=6.0
-
-# ── CLI helpers ───────────────────────────────────────────────────────────────
-typer>=0.9.0
-
-# ── Testing ───────────────────────────────────────────────────────────────────
-pytest>=7.4.0
-pytest-cov>=4.1.0
-
-# ── External RL trainer (optional — not needed for server or inference) ────────
-# stable-baselines3>=2.0.0   # uncomment if using train_external.py

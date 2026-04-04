@@ -289,7 +289,7 @@ class EpisodeState(BaseModel):
     failures_count: int = Field(
         default=0, ge=0, description="System failures so far"
     )
-    actions_taken: List[Action] = Field(
+    actions_taken: List[Dict[str, Any]] = Field(
         default_factory=list, description="Full action history for this episode"
     )
     seed: Optional[int] = Field(

@@ -46,26 +46,27 @@ import numpy as np
 import openenv as gym
 from openenv import spaces
 
-from adaptive_alert_triage.models import (
+from .models import (
     Action,
     Alert,
     EpisodeState,
     Observation,
     Reward,
 )
-from adaptive_alert_triage import utils
+from . import utils
 
 # Import reward calculation with graceful fallback for development mode
+import os as _os
+import sys as _sys
+
 try:
     from rewards.reward import calculate_reward
 except ImportError:
-    import os
-    import sys
-
-    _project_root = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    _project_root = _os.path.dirname(
+        _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
     )
-    sys.path.insert(0, _project_root)
+    if _project_root not in _sys.path:
+        _sys.path.insert(0, _project_root)
     from rewards.reward import calculate_reward  # type: ignore[no-redef]
 
 
