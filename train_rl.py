@@ -209,6 +209,14 @@ def run(args):
         print(f"\n[2/3] Training PPO agent ({n_episodes} episodes)…")
         env     = AdaptiveAlertTriageEnv(task_id=task_id)
         trainer = PPOTrainer(task_id=task_id, seed=args.seed, lr=3e-4)
+        
+        weight_path = f"weights/ppo_{task_id}.json"
+        if os.path.exists(weight_path):
+            try:
+                trainer.load(weight_path)
+                print(f"  Resuming continuous learning! Loaded existing weights from {weight_path}.")
+            except Exception as e:
+                print(f"  Could not load existing weights (starting fresh): {e}")
 
         t0 = time.time()
         history = trainer.train(
