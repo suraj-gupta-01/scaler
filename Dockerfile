@@ -70,7 +70,7 @@ RUN useradd -m -u 1000 appuser \
 USER appuser
 # ── Default command: start the FastAPI server ─────────────────────────────────
 CMD ["sh", "-c", \
-    "uvicorn adaptive_alert_triage.server:app \
+    "python -m uvicorn src.adaptive_alert_triage.server:app \
     --host 0.0.0.0 \
     --port ${PORT:-7860} \
     --workers 1 \
