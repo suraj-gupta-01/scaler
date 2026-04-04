@@ -61,7 +61,7 @@
         }
         .header h1 {
             font-size: 20px; font-weight: 700;
-            background: var(--gradient-blue); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background: var(--gradient-blue); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
         }
         .header-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
         .header-right { display: flex; align-items: center; gap: 12px; }
@@ -443,7 +443,7 @@
 // ═══════════════════════════════════════════════════════════════════
 // State
 // ═══════════════════════════════════════════════════════════════════
-const SERVER = 'http://localhost:8000';
+const SERVER = 'https://tusharp2006-scaler-deployment.hf.space/';
 let currentAlerts = [];
 let episodeScores = [];
 let episodeRewards = [];
