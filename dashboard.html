@@ -242,6 +242,17 @@
         .toast-info { background: rgba(59,130,246,0.9); color: white; }
         @keyframes toastIn { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
 
+        /* ── Tabs & Training ────────────────────────────────────── */
+        .tabs { display: flex; gap: 14px; margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+        .tab { font-size: 14px; font-weight: 600; color: var(--text-muted); cursor: pointer; padding: 10px 16px; border-radius: 8px; transition: 0.2s; }
+        .tab:hover { background: rgba(255,255,255,0.05); color: var(--text-primary); }
+        .tab.active { background: var(--bg-input); color: var(--accent-blue); border: 1px solid var(--border); }
+        .training-container { display: none; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+        .training-container.active { display: block; }
+        .testing-container { display: none; }
+        .testing-container.active { display: block; }
+        .terminal { background: #000; color: #10b981; font-family: 'Courier New', monospace; padding: 16px; border-radius: 8px; height: 400px; overflow-y: auto; margin-top: 16px; font-size: 12px; border: 1px solid var(--border); line-height: 1.5; white-space: pre-wrap; }
+        
         @media (max-width:1200px) {
             .grid-stats { grid-template-columns: repeat(3, 1fr); }
             .grid-main, .grid-bottom { grid-template-columns: 1fr; }
@@ -269,6 +280,25 @@
         </div>
     </div>
 
+    <!-- ══════ Tabs ══════ -->
+    <div class="tabs">
+        <div class="tab active" id="tabLive" onclick="switchTab('live')">Live Testing</div>
+        <div class="tab" id="tabTrain" onclick="switchTab('train')">Agent Training</div>
+    </div>
+
+    <!-- ══════ Training View ══════ -->
+    <div class="training-container" id="trainingView">
+        <h3>Train RL Agent (PPO)</h3>
+        <p style="color:var(--text-muted); font-size:12px; margin-top:8px; margin-bottom:16px;">Launch background training across varying difficulty tasks.</p>
+        <div class="controls">
+            <span style="font-size:12px">Easy Episodes:</span>
+            <input type="number" id="trainEpisodes" value="300" style="padding:6px; border-radius:6px; border:1px solid var(--border); background:var(--bg-input); color:var(--text-primary); width:100px;">
+            <button class="btn btn-primary" onclick="startTraining()" id="trainBtn">▶ Start Training</button>
+        </div>
+        <div class="terminal" id="trainTerminal">Ready to train. Run PPO to update weights.</div>
+    </div>
+
+    <div class="testing-container active" id="testingView">
     <!-- ══════ Action Guide ══════ -->
     <div class="help-bar">
         <div class="help-item">
@@ -437,13 +467,14 @@
             </div>
         </div>
     </div>
+    </div> <!-- end testing-container -->
 </div>
 
 <script>
 // ═══════════════════════════════════════════════════════════════════
 // State
 // ═══════════════════════════════════════════════════════════════════
-const SERVER = 'https://tusharp2006-scaler-deployment.hf.space/';
+const SERVER = 'https://tusharp2006-scaler-deployment.hf.space';
 let currentAlerts = [];
 let episodeScores = [];
 let episodeRewards = [];
@@ -773,10 +804,60 @@ function showToast(msg, type='success') {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// UI & Tabs
+// ═══════════════════════════════════════════════════════════════════
+function switchTab(tab) {
+    document.getElementById('tabLive').className = tab === 'live' ? 'tab active' : 'tab';
+    document.getElementById('tabTrain').className = tab === 'train' ? 'tab active' : 'tab';
+    document.getElementById('testingView').className = tab === 'live' ? 'testing-container active' : 'testing-container';
+    document.getElementById('trainingView').className = tab === 'train' ? 'training-container active' : 'training-container';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Training Webhooks
+// ═══════════════════════════════════════════════════════════════════
+let trainingInterval = null;
+
+async function startTraining() {
+    const ep = document.getElementById('trainEpisodes').value || 300;
+    try {
+        const r = await api('POST', `/train?episodes=${ep}`);
+        if(r.error) showToast(r.error, 'error');
+        else {
+            showToast('Training started in background!', 'success');
+            if(!trainingInterval) trainingInterval = setInterval(pollTraining, 2000);
+            document.getElementById('trainBtn').disabled = true;
+        }
+    } catch(e) { showToast('Trainer error', 'error'); }
+}
+
+async function pollTraining() {
+    try {
+        const r = await api('GET', '/train/status');
+        if (r.error) return;
+        
+        const term = document.getElementById('trainTerminal');
+        if (r.logs && r.logs.length) {
+            term.textContent = r.logs.join('\n');
+            term.scrollTop = term.scrollHeight; // Auto-scroll
+        }
+        
+        if (!r.is_running) {
+            if(trainingInterval) { clearInterval(trainingInterval); trainingInterval = null; }
+            document.getElementById('trainBtn').disabled = false;
+        } else {
+            document.getElementById('trainBtn').disabled = true;
+        }
+    } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // Init
 // ═══════════════════════════════════════════════════════════════════
 pollHealth();
+pollTraining();
 setInterval(pollHealth, 5000);
+if(document.getElementById('tabTrain').className.includes('active')) setInterval(pollTraining, 2000);
 </script>
 </body>
 </html>

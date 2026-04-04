@@ -100,7 +100,7 @@ def _norm(raw: str) -> str:
 
 app = FastAPI(title="Adaptive Alert Triage RL Server", version="0.3.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
-                   allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+                   allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
 #Changes
 @app.middleware("http")
 async def log_requests(request, call_next):
@@ -550,6 +550,84 @@ async def root():
         ],
     }
 
+
+import threading
+import subprocess
+
+_training_proc = None
+_training_logs = []
+
+def _run_training(episodes: int):
+    global _training_proc, _training_logs, _ppo_agents
+    _training_logs = [f"Starting training with --episodes {episodes}..."]
+    try:
+        _training_proc = subprocess.Popen(
+            [sys.executable, "train_rl.py", "--episodes", str(episodes)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            cwd=_project_root if _project_root else os.getcwd()
+        )
+        for line in iter(_training_proc.stdout.readline, ''):
+            if line:
+                _training_logs.append(line.rstrip('\n'))
+                if len(_training_logs) > 1000:
+                    _training_logs.pop(0)
+        _training_proc.wait()
+        _training_logs.append(f"Training finished with exit code {- _training_proc.returncode if _training_proc.returncode < 0 else _training_proc.returncode}")
+        
+        # Auto-reload PPO weights if training succeeded
+        if _training_proc.returncode == 0:
+            for tid in ("easy", "medium", "hard"):
+                agent = _load_ppo(tid)
+                if agent:
+                    _ppo_agents[tid] = agent
+            _training_logs.append("Successfully reloaded PPO weights for all tasks.")
+            
+            # Auto-save weights back to Hugging Face
+            try:
+                from huggingface_hub import HfApi
+                hf_token = os.environ.get("HF_TOKEN")
+                repo_id = os.environ.get("SPACE_ID", "tusharp2006/scaler-deployment")
+                
+                if hf_token:
+                    _training_logs.append(f"Pushing updated weights back to HF Hub ({repo_id})...")
+                    api = HfApi(token=hf_token)
+                    weights_dir = os.path.join(_project_root if _project_root else os.getcwd(), "weights")
+                    
+                    if os.path.exists(weights_dir):
+                        api.upload_folder(
+                            repo_id=repo_id,
+                            folder_path=weights_dir,
+                            path_in_repo="weights",
+                            repo_type="space",
+                            commit_message="Auto-sync weights after RL training"
+                        )
+                        _training_logs.append("Weights successfully pushed and persisted to Hugging Face!")
+                else:
+                    _training_logs.append("No HF_TOKEN found in environment. Skipping weight cloud-persistence.")
+            except ImportError:
+                _training_logs.append("huggingface_hub not installed. Skipping cloud backup.")
+            except Exception as e:
+                _training_logs.append(f"Failed to push weights to Hub: {e}")
+            
+    except Exception as e:
+        _training_logs.append(f"Error starting training: {e}")
+
+@app.post("/train")
+async def start_training(episodes: int = 300):
+    global _training_proc
+    if _training_proc is not None and _training_proc.poll() is None:
+        return {"status": "already running"}
+    threading.Thread(target=_run_training, args=(episodes,), daemon=True).start()
+    return {"status": "started"}
+
+@app.get("/train/status")
+async def get_training_status():
+    global _training_proc, _training_logs
+    is_running = _training_proc is not None and _training_proc.poll() is None
+    return {"is_running": is_running, "logs": _training_logs}
 
 @app.get("/web")
 async def web_ui():
