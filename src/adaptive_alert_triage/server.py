@@ -100,6 +100,11 @@ def _norm(raw: str) -> str:
 app = FastAPI(title="Adaptive Alert Triage RL Server", version="0.3.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+#Changes
+@app.middleware("http")
+async def log_requests(request, call_next):
+    print(f"REQUEST: {request.method} {request.url}")
+    return await call_next(request)
 
 # ── Global state ──────────────────────────────────────────────────────────────
 
