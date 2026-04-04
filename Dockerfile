@@ -9,7 +9,7 @@
 #   docker build -t adaptive-alert-triage:latest .
 #
 # Run server:
-#   docker run -p 8000:8000 adaptive-alert-triage:latest
+#   docker run -p 7860:7860 adaptive-alert-triage:latest
 #
 # Run inference baseline:
 #   docker run --rm \
@@ -23,7 +23,7 @@
 #   API_BASE_URL  — LLM endpoint  (default: https://api.openai.com/v1)
 #   MODEL_NAME    — LLM model name (default: gpt-4o-mini)
 #   HF_TOKEN      — Hugging Face / OpenAI API key
-#   PORT          — Server port   (default: 8000)
+#   PORT          — Server port   (default: 7860)
 
 # ── Base image ────────────────────────────────────────────────────────────────
 FROM python:3.11-slim
