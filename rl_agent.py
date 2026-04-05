@@ -346,7 +346,7 @@ class PPOTrainer:
         # Higher entropy for hard task: the policy must not collapse to
         # "always INVESTIGATE" before it has learned chain patterns
         if task_id == "hard":
-            self.ent_coef = max(ent_coef, 0.05)
+            self.ent_coef = max(ent_coef, 0.15)  # Bumped to 0.15 to break 'investigate' habit
         elif task_id == "easy":
             self.ent_coef = max(ent_coef, 0.03)
         else:

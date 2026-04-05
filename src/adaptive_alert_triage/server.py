@@ -446,7 +446,13 @@ async def recommend():
                 episode_step   = env.current_step,
             )
             s     = encode_state(obs)
+            
+            # --- CRITICAL FIX: Do not permanently mutate memory on UI poll ---
+            old_h, old_c = ppo.net.h.copy(), ppo.net.c.copy()
             probs, val = ppo.net.forward(s)
+            ppo.net.h, ppo.net.c = old_h, old_c
+            # -----------------------------------------------------------------
+            
             idx   = int(np.argmax(probs))
             act   = _ACTION_NAMES[idx]
             conf  = round(float(probs[idx]) * 100, 1)
@@ -492,6 +498,15 @@ async def recommend():
     }
 
 
+@app.get("/agent/weights/{task_id}")
+async def download_weights(task_id: str):
+    """Allow users to manually download their trained weights."""
+    path = os.path.join(_project_root if _project_root else os.getcwd(), "weights", f"ppo_{task_id}.json")
+    if not os.path.exists(path):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"No trained weights found for {task_id}")
+    from fastapi.responses import FileResponse
+    return FileResponse(path, media_type='application/json', filename=f"ppo_{task_id}.json")
 # ── WebSocket ─────────────────────────────────────────────────────────────────
 
 @app.websocket("/ws/train")
