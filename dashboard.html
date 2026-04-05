@@ -296,6 +296,12 @@
             <button class="btn btn-primary" onclick="startTraining()" id="trainBtn">▶ Start Training</button>
         </div>
         <div class="terminal" id="trainTerminal">Ready to train. Run PPO to update weights.</div>
+        <div style="margin-top:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <span style="font-size:12px; color:var(--text-muted);">📥 Download Weights:</span>
+            <button class="btn" onclick="downloadWeights('easy')" style="font-size:11px; padding:4px 10px;">🟢 Easy</button>
+            <button class="btn" onclick="downloadWeights('medium')" style="font-size:11px; padding:4px 10px;">🟡 Medium</button>
+            <button class="btn" onclick="downloadWeights('hard')" style="font-size:11px; padding:4px 10px;">🔴 Hard</button>
+        </div>
     </div>
 
     <div class="testing-container active" id="testingView">
@@ -856,6 +862,20 @@ async function pollTraining() {
             document.getElementById('trainBtn').disabled = true;
         }
     } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Weight Downloads
+// ═══════════════════════════════════════════════════════════════════
+function downloadWeights(taskId) {
+    const url = `${SERVER}/agent/weights/${taskId}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ppo_${taskId}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast(`Downloading ${taskId} weights…`, 'info');
 }
 
 // ═══════════════════════════════════════════════════════════════════

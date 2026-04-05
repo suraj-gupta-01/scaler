@@ -263,9 +263,36 @@ async def _episode_loop() -> None:
 
 # ── Startup / shutdown ────────────────────────────────────────────────────────
 
+def _restore_pristine_weights():
+    """
+    On HF Spaces, the filesystem cache persists across rebuilds.
+    Old trained weights survive and override repo weights.
+    Fix: copy the pristine repo weights (saved during Docker build)
+    back into the working weights/ directory on every startup.
+    """
+    import shutil
+    pristine_dir = os.path.join(_project_root if _project_root else os.getcwd(), "weights_pristine")
+    weights_dir  = os.path.join(_project_root if _project_root else os.getcwd(), "weights")
+
+    if not os.path.exists(pristine_dir):
+        print("   [STARTUP] No pristine weights found, skipping restore.")
+        return
+
+    os.makedirs(weights_dir, exist_ok=True)
+    for f in os.listdir(pristine_dir):
+        if f.startswith("ppo_") and f.endswith(".json"):
+            src = os.path.join(pristine_dir, f)
+            dst = os.path.join(weights_dir, f)
+            shutil.copy2(src, dst)
+            print(f"   [STARTUP] Restored pristine weights: {f}")
+
+
 @app.on_event("startup")
 async def startup():
     global env, _loop_task
+
+    # Restore repo-committed weights, overriding any stale HF cache
+    _restore_pristine_weights()
 
     env = AdaptiveAlertTriageEnv(task_id="hard")
     env.real_alerts_queue = deque(maxlen=50)
@@ -536,12 +563,11 @@ async def recommend():
 
 @app.get("/agent/weights/{task_id}")
 async def download_weights(task_id: str):
-    """Allow users to manually download their trained weights."""
+    """Download trained weights for a task."""
+    from fastapi import HTTPException
     path = os.path.join(_project_root if _project_root else os.getcwd(), "weights", f"ppo_{task_id}.json")
     if not os.path.exists(path):
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=f"No trained weights found for {task_id}")
-    from fastapi.responses import FileResponse
     return FileResponse(path, media_type='application/json', filename=f"ppo_{task_id}.json")
 # ── WebSocket ─────────────────────────────────────────────────────────────────
 

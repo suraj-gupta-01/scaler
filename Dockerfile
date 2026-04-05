@@ -66,8 +66,10 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
 
 # ── Add non-root user ───────────────────────────────────────────────
+# Save a pristine copy of repo weights so cached HF weights can be overridden
+RUN cp -r /app/weights /app/weights_pristine 2>/dev/null || true
 RUN useradd -m -u 1000 appuser \
-    && mkdir -p /app/weights /app/results \
+    && mkdir -p /app/weights /app/results /app/weights_pristine \
     && chown -R appuser:appuser /app
 USER appuser
 # ── Default command: start the FastAPI server ─────────────────────────────────
