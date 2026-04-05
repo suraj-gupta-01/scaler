@@ -651,3 +651,9 @@ async def list_tasks():
         {"id": "medium", "success_threshold": 0.55, "max_steps": 40},
         {"id": "hard",   "success_threshold": 0.50, "max_steps": 50},
     ]}
+@app.get("/debug/env")
+async def debug_env():
+    return {
+        "has_token": os.environ.get("HF_TOKEN") is not None,
+        "env_keys": list(os.environ.keys())
+    }
