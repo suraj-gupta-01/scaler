@@ -567,7 +567,7 @@ def _run_training(episodes: int):
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
-            cwd=_project_root if _project_root else os.getcwd()
+            cwd=_project_root if _project_root else os.getcwd(),
             env=dict(os.environ)
         )
         for line in iter(_training_proc.stdout.readline, ''):
