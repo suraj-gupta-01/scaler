@@ -650,13 +650,16 @@ class PPOTrainer:
     # ------------------------------------------------------------------
 
     def act(self, obs) -> Any:
-        """Greedy action for deployment / evaluation."""
+        """Stochastic action matching training behavior."""
         from adaptive_alert_triage.models import Action
         if not obs.alerts:
             raise ValueError("No alerts")
         s = encode_state(obs)
         probs, _ = self.net.forward(s)
-        a = int(np.argmax(probs))
+        # Sample from policy distribution (same as training), NOT argmax!
+        # argmax collapses a learned distribution like [0.35, 0.25, 0.22, 0.18]
+        # into always picking the same action.
+        a = int(np.random.choice(4, p=probs))
         alert = _select_alert(obs, a)
         return Action(alert_id=alert.id, action_type=_ACTION_NAMES[a])
 

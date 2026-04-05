@@ -485,7 +485,11 @@ async def recommend():
             ppo.net.h, ppo.net.c = old_h, old_c
             # -----------------------------------------------------------------
             
-            idx   = int(np.argmax(probs))
+            # CRITICAL: Use sampling (same as training), NOT argmax!
+            # argmax always picks the single highest prob, collapsing a
+            # balanced policy like [0.35, 0.25, 0.22, 0.18] into "always
+            # INVESTIGATE". Sampling reproduces the trained behavior.
+            idx   = int(np.random.choice(4, p=probs))
             act   = _ACTION_NAMES[idx]
             conf  = round(float(probs[idx]) * 100, 1)
             return {
