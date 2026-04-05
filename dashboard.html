@@ -626,10 +626,13 @@ async function fetchRecommendation() {
 }
 
 async function stepOnce() {
-    if (episodeDone || !currentAlerts.length) return false;
+    if (episodeDone) return false;
+    if (!currentAlerts.length) return 'wait'; // Queue temporarily empty, wait for environmental spawn
+    
     // Get recommendation from server (uses trained weights or rule-based)
     const rec = await fetchRecommendation();
     if (!rec || rec.error) {
+        if (!currentAlerts.length) return 'wait';
         showToast('No recommendation available', 'error');
         return false;
     }
@@ -687,7 +690,11 @@ async function autoPlay() {
     document.getElementById('autoBtn').textContent = '⏸ Pause';
     while (autoPlaying && !episodeDone) {
         const ok = await stepOnce();
-        if (!ok) break;
+        if (ok === 'wait') {
+            await new Promise(r => setTimeout(r, 1500)); // Queue empty, wait for environmental spawn
+            continue;
+        }
+        if (ok === false) break;
         await new Promise(r => setTimeout(r, 300));
     }
     autoPlaying = false;
