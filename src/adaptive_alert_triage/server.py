@@ -568,6 +568,7 @@ def _run_training(episodes: int):
             text=True,
             bufsize=1,
             cwd=_project_root if _project_root else os.getcwd()
+            env=dict(os.environ)
         )
         for line in iter(_training_proc.stdout.readline, ''):
             if line:
