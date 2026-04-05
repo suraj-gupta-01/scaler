@@ -550,7 +550,6 @@ async def root():
         ],
     }
 
-
 import threading
 import subprocess
 
@@ -561,6 +560,9 @@ def _run_training(episodes: int):
     global _training_proc, _training_logs, _ppo_agents
     _training_logs = [f"Starting training with --episodes {episodes}..."]
     try:
+        env_vars = dict(os.environ)
+        env_vars["HF_TOKEN"] = os.environ.get("HF_TOKEN", "")
+        env_vars["HF_REPO_ID"] = os.environ.get("HF_REPO_ID", "")
         _training_proc = subprocess.Popen(
             [sys.executable, "train_rl.py", "--episodes", str(episodes)],
             stdout=subprocess.PIPE,
@@ -568,7 +570,7 @@ def _run_training(episodes: int):
             text=True,
             bufsize=1,
             cwd=_project_root if _project_root else os.getcwd(),
-            env=dict(os.environ)
+            env=env_vars
         )
         for line in iter(_training_proc.stdout.readline, ''):
             if line:
