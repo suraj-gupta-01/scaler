@@ -560,17 +560,13 @@ def _run_training(episodes: int):
     global _training_proc, _training_logs, _ppo_agents
     _training_logs = [f"Starting training with --episodes {episodes}..."]
     try:
-        env_vars = dict(os.environ)
-        env_vars["HF_TOKEN"] = os.environ.get("HF_TOKEN", "")
-        env_vars["HF_REPO_ID"] = os.environ.get("HF_REPO_ID", "")
         _training_proc = subprocess.Popen(
             [sys.executable, "train_rl.py", "--episodes", str(episodes)],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
-            cwd=_project_root if _project_root else os.getcwd(),
-            env=env_vars
+            cwd=_project_root if _project_root else os.getcwd()
         )
         for line in iter(_training_proc.stdout.readline, ''):
             if line:
@@ -653,9 +649,3 @@ async def list_tasks():
         {"id": "medium", "success_threshold": 0.55, "max_steps": 40},
         {"id": "hard",   "success_threshold": 0.50, "max_steps": 50},
     ]}
-@app.get("/debug/env")
-async def debug_env():
-    return {
-        "has_token": os.environ.get("HF_TOKEN") is not None,
-        "env_keys": list(os.environ.keys())
-    }
