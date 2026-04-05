@@ -231,6 +231,13 @@ async def _episode_loop() -> None:
             if not env.alerts:
                 await asyncio.sleep(STEP_INTERVAL)
                 continue
+                
+            # --- Prevent Race Conditions ---
+            # If the user pushed a button in the UI recently, yield control to them
+            import time
+            if time.time() - globals().get("_last_manual_step_time", 0.0) < 5.0:
+                await asyncio.sleep(STEP_INTERVAL)
+                continue
 
             action = _ppo_act() or _rule_act()
             if action is None:
@@ -367,16 +374,41 @@ async def reset_env(task_id: str = "hard"):
         return {"error": str(e), "traceback": traceback.format_exc()}
 
 
+import time
+_last_manual_step_time = 0.0
+
 @app.post("/env/step")
 async def step_env(request: StepRequest):
-    global episode_scores
+    global episode_scores, _last_manual_step_time
+    _last_manual_step_time = time.time()  # Pause background loop
+    
     if not env:
         return {"error": "not initialized"}
     if request.action_type not in {"INVESTIGATE", "IGNORE", "ESCALATE", "DELAY"}:
         return {"error": f"Invalid action '{request.action_type}'"}
     try:
+        from rl_agent import encode_state
+        # Capture old state to commit it to the agent's LSTM memory
+        old_obs = Observation(
+            alerts         = list(env.alerts),
+            system_load    = getattr(env, "_last_system_load", 0.5),
+            queue_length   = len(env.alerts),
+            time_remaining = env.max_steps - env.current_step,
+            resource_budget=(
+                env.max_investigations_per_step - env.investigations_used
+                if env.max_investigations_per_step is not None else None
+            ),
+            episode_step   = env.current_step,
+        )
+
         action = Action(alert_id=request.alert_id, action_type=request.action_type)
         obs, reward, done, info = env.step(action)
+        
+        # Synchronize test agent memory
+        agent = _ppo_agents.get(env.task_id)
+        if agent is not None:
+            agent.net.forward(encode_state(old_obs))
+            
         _tick(info)
         s = _score()
         info["task_score"] = s
@@ -598,33 +630,6 @@ def _run_training(episodes: int):
                 if agent:
                     _ppo_agents[tid] = agent
             _training_logs.append("Successfully reloaded PPO weights for all tasks.")
-            
-            # Auto-save weights back to Hugging Face
-            try:
-                from huggingface_hub import HfApi
-                hf_token = os.environ.get("HF_TOKEN")
-                repo_id = os.environ.get("HF_REPO_ID", "tusharp2006/scaler-deployment")
-                
-                if hf_token:
-                    _training_logs.append(f"Pushing updated weights back to HF Hub ({repo_id})...")
-                    api = HfApi(token=hf_token)
-                    weights_dir = os.path.join(_project_root if _project_root else os.getcwd(), "weights")
-                    
-                    if os.path.exists(weights_dir):
-                        api.upload_folder(
-                            repo_id=repo_id,
-                            folder_path=weights_dir,
-                            path_in_repo="weights",
-                            repo_type="space",
-                            commit_message="Auto-sync weights after RL training"
-                        )
-                        _training_logs.append("Weights successfully pushed and persisted to Hugging Face!")
-                else:
-                    _training_logs.append("No HF_TOKEN found in environment. Skipping weight cloud-persistence.")
-            except ImportError:
-                _training_logs.append("huggingface_hub not installed. Skipping cloud backup.")
-            except Exception as e:
-                _training_logs.append(f"Failed to push weights to Hub: {e}")
             
     except Exception as e:
         _training_logs.append(f"Error starting training: {e}")
