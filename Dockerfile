@@ -43,6 +43,7 @@ COPY pyproject.toml .
 
 # ── Upgrade pip/setuptools/wheel ──────────────────────────────────────────────
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+RUN pip install huggingface_hub
 
 # ── Copy full project ─────────────────────────────────────────────────────────
 COPY . .
