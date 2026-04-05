@@ -589,7 +589,7 @@ def _run_training(episodes: int):
             try:
                 from huggingface_hub import HfApi
                 hf_token = os.environ.get("HF_TOKEN")
-                repo_id = os.environ.get("SPACE_ID", "tusharp2006/scaler-deployment")
+                repo_id = os.environ.get("HF_REPO_ID", "tusharp2006/scaler-deployment")
                 
                 if hf_token:
                     _training_logs.append(f"Pushing updated weights back to HF Hub ({repo_id})...")
