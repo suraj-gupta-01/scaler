@@ -1,30 +1,19 @@
 """
-FastAPI OpenEnv Server for Adaptive Alert Triage Environment — v0.3.0
+FastAPI OpenEnv Server for Adaptive Alert Triage Environment — v0.3.1
 
-Root-cause fixes:
+Root-cause fixes from v0.3.0:
   FIX 1 — "No active episode" on /agent/recommend
-     The startup now calls env.reset() immediately AND starts an asyncio
-     background task (_episode_loop) that keeps the environment always live.
-     Every STEP_INTERVAL seconds it checks alerts, picks an action (PPO or
-     rule-based fallback), calls env.step(), and resets when done.
-
   FIX 2 — Queued alerts (real_alerts_queue) never appeared in env.alerts
-     env.py only drains real_alerts_queue inside _generate_new_alerts() which
-     runs during env.step(). The episode loop calls step() continuously, so
-     real alerts are consumed automatically within ~1s of being queued.
-
   FIX 3 — alert.dict() / obs.dict() removed in Pydantic v2
-     Fixed to model_dump() everywhere.
-
   FIX 4 — task_score missing from info dict
-     Computed server-side from action_correct running average and injected
-     into info["task_score"] so train_external.py receives it correctly.
-
   FIX 5 — real_alerts_queue dropped on /env/reset
-     Queue is saved and re-attached to the new env object.
-
   FIX 6 — state.system_load AttributeError
-     Fixed to state.observation.system_load (EpisodeState structure).
+
+New in v0.3.1 (pre-submission compliance):
+  FIX 7 — Added POST /reset  (OpenEnv spec requires top-level /reset endpoint)
+  FIX 8 — Added POST /env/reset  (alias without task_id, defaults to "hard")
+  FIX 9 — Registered `openenv validate` CLI entry-point via pyproject.toml
+           (see companion pyproject.toml fix)
 """
 
 from __future__ import annotations
@@ -73,6 +62,12 @@ class StepRequest(BaseModel):
     action_type: str
 
 
+class ResetRequest(BaseModel):
+    """Optional body for POST /reset — task_id defaults to 'hard'."""
+    task_id: Optional[str] = "hard"
+    seed: Optional[int] = None
+
+
 class HealthResponse(BaseModel):
     status: str
     env_ready: bool
@@ -98,10 +93,10 @@ def _norm(raw: str) -> str:
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="Adaptive Alert Triage RL Server", version="0.3.0")
+app = FastAPI(title="Adaptive Alert Triage RL Server", version="0.3.1")
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
-#Changes
+
 @app.middleware("http")
 async def log_requests(request, call_next):
     print(f"REQUEST: {request.method} {request.url}")
@@ -202,17 +197,6 @@ def _rule_act() -> Optional[Action]:
 # ── Always-live episode loop ──────────────────────────────────────────────────
 
 async def _episode_loop() -> None:
-    """
-    Background asyncio task.
-
-    Every STEP_INTERVAL seconds:
-      1. If no active alerts → reset (start new episode).
-      2. Choose action: PPO weights > rule-based fallback.
-      3. Call env.step() → drains real_alerts_queue automatically.
-      4. Track score; on done → log + reset.
-
-    This is what makes /agent/recommend always return a valid answer.
-    """
     global env, _last_action
 
     while True:
@@ -221,7 +205,6 @@ async def _episode_loop() -> None:
                 await asyncio.sleep(STEP_INTERVAL)
                 continue
 
-            # Start new episode if terminal or empty
             if not env.alerts or env._is_terminal():
                 if _step_total > 0:
                     episode_scores.append(_score())
@@ -231,9 +214,7 @@ async def _episode_loop() -> None:
             if not env.alerts:
                 await asyncio.sleep(STEP_INTERVAL)
                 continue
-                
-            # --- Prevent Race Conditions ---
-            # If the user pushed a button in the UI recently, yield control to them
+
             import time
             if time.time() - globals().get("_last_manual_step_time", 0.0) < 5.0:
                 await asyncio.sleep(STEP_INTERVAL)
@@ -264,12 +245,6 @@ async def _episode_loop() -> None:
 # ── Startup / shutdown ────────────────────────────────────────────────────────
 
 def _restore_pristine_weights():
-    """
-    On HF Spaces, the filesystem cache persists across rebuilds.
-    Old trained weights survive and override repo weights.
-    Fix: copy the pristine repo weights (saved during Docker build)
-    back into the working weights/ directory on every startup.
-    """
     import shutil
     pristine_dir = os.path.join(_project_root if _project_root else os.getcwd(), "weights_pristine")
     weights_dir  = os.path.join(_project_root if _project_root else os.getcwd(), "weights")
@@ -291,12 +266,11 @@ def _restore_pristine_weights():
 async def startup():
     global env, _loop_task
 
-    # Restore repo-committed weights, overriding any stale HF cache
     _restore_pristine_weights()
 
     env = AdaptiveAlertTriageEnv(task_id="hard")
     env.real_alerts_queue = deque(maxlen=50)
-    env.reset()   # ← FIX 1: immediately populate env.alerts
+    env.reset()
 
     for tid in ("easy", "medium", "hard"):
         agent = _load_ppo(tid)
@@ -305,7 +279,7 @@ async def startup():
 
     _loop_task = asyncio.create_task(_episode_loop())
 
-    print("✅ Alert Triage RL Server v0.3.0")
+    print("✅ Alert Triage RL Server v0.3.1")
     print(f"   Active alerts : {len(env.alerts)}")
     print(f"   PPO loaded    : {list(_ppo_agents.keys()) or 'none (run train_rl.py first)'}")
     print(f"   Episode loop  : every {STEP_INTERVAL}s")
@@ -382,11 +356,14 @@ async def ingest_batch(alerts: List[IngestAlert]):
 
 # ── Environment control ───────────────────────────────────────────────────────
 
-@app.post("/env/reset/{task_id}")
-async def reset_env(task_id: str = "hard"):
+async def _do_reset(task_id: str = "hard", seed: Optional[int] = None) -> dict:
+    """
+    Shared reset logic used by all reset endpoints.
+    Returns a dict suitable for JSON response.
+    """
     global env
     if task_id not in ("easy", "medium", "hard"):
-        return {"error": f"Invalid task_id '{task_id}'"}
+        return {"error": f"Invalid task_id '{task_id}'. Must be one of: easy, medium, hard"}
     try:
         saved = env.real_alerts_queue if (env and hasattr(env, "real_alerts_queue")) else None
         env = AdaptiveAlertTriageEnv(task_id=task_id)
@@ -394,11 +371,54 @@ async def reset_env(task_id: str = "hard"):
         agent = _load_ppo(task_id)
         if agent:
             _ppo_agents[task_id] = agent
-        obs = env.reset()
+        obs = env.reset(seed=seed)
         _reset_score()
         return {"status": "reset", "task_id": task_id, "obs": obs.model_dump()}
     except Exception as e:
         return {"error": str(e), "traceback": traceback.format_exc()}
+
+
+# FIX 7 — Top-level /reset endpoint required by OpenEnv validator ping
+# The pre-submission checker does: POST $PING_URL/reset
+# This must return 200 and a valid Observation.
+@app.post("/reset")
+async def reset_top_level(request: Optional[ResetRequest] = None):
+    """
+    OpenEnv-required top-level reset endpoint.
+
+    POST /reset
+    Body (optional JSON): {"task_id": "easy"|"medium"|"hard", "seed": int}
+
+    Returns the initial Observation for the new episode.
+    This is the endpoint pinged by the pre-submission checker.
+    """
+    task_id = "hard"
+    seed    = None
+    if request is not None:
+        task_id = request.task_id or "hard"
+        seed    = request.seed
+    return await _do_reset(task_id=task_id, seed=seed)
+
+
+# FIX 8 — /env/reset without a path parameter (alias, defaults to "hard")
+@app.post("/env/reset")
+async def reset_env_default(request: Optional[ResetRequest] = None):
+    """
+    Alias for /env/reset/{task_id} without requiring a path parameter.
+    Accepts the same optional JSON body as /reset.
+    """
+    task_id = "hard"
+    seed    = None
+    if request is not None:
+        task_id = request.task_id or "hard"
+        seed    = request.seed
+    return await _do_reset(task_id=task_id, seed=seed)
+
+
+@app.post("/env/reset/{task_id}")
+async def reset_env(task_id: str = "hard"):
+    """Reset with explicit task_id in path (original endpoint, kept for compatibility)."""
+    return await _do_reset(task_id=task_id)
 
 
 import time
@@ -407,15 +427,14 @@ _last_manual_step_time = 0.0
 @app.post("/env/step")
 async def step_env(request: StepRequest):
     global episode_scores, _last_manual_step_time
-    _last_manual_step_time = time.time()  # Pause background loop
-    
+    _last_manual_step_time = time.time()
+
     if not env:
         return {"error": "not initialized"}
     if request.action_type not in {"INVESTIGATE", "IGNORE", "ESCALATE", "DELAY"}:
         return {"error": f"Invalid action '{request.action_type}'"}
     try:
-        from rl_agent import encode_state
-        # Capture old state to commit it to the agent's LSTM memory
+        from rl_agent import encode_state  # type: ignore
         old_obs = Observation(
             alerts         = list(env.alerts),
             system_load    = getattr(env, "_last_system_load", 0.5),
@@ -430,12 +449,11 @@ async def step_env(request: StepRequest):
 
         action = Action(alert_id=request.alert_id, action_type=request.action_type)
         obs, reward, done, info = env.step(action)
-        
-        # Synchronize test agent memory
+
         agent = _ppo_agents.get(env.task_id)
         if agent is not None:
             agent.net.forward(encode_state(old_obs))
-            
+
         _tick(info)
         s = _score()
         info["task_score"] = s
@@ -460,7 +478,7 @@ async def get_state():
                 "current_step":   env.current_step,
                 "max_steps":      env.max_steps,
                 "failures_count": env.failures_count,
-                "system_load":    state.observation.system_load,  # FIX 6
+                "system_load":    state.observation.system_load,
                 "queue_length":   len(env.alerts),
                 "task_id":        env.task_id,
                 "real_queue_size": len(env.real_alerts_queue) if hasattr(env, "real_alerts_queue") else 0,
@@ -476,10 +494,6 @@ async def get_state():
 
 @app.get("/agent/recommend")
 async def recommend():
-    """
-    Returns the trained PPO agent's recommended action for the current alert.
-    Always has alerts because the episode loop keeps the environment live.
-    """
     if not env or not env.alerts:
         return {
             "error": "No alerts yet — episode loop is starting, retry in 2s",
@@ -505,17 +519,9 @@ async def recommend():
                 episode_step   = env.current_step,
             )
             s     = encode_state(obs)
-            
-            # --- CRITICAL FIX: Do not permanently mutate memory on UI poll ---
             old_h, old_c = ppo.net.h.copy(), ppo.net.c.copy()
             probs, val = ppo.net.forward(s)
             ppo.net.h, ppo.net.c = old_h, old_c
-            # -----------------------------------------------------------------
-            
-            # CRITICAL: Use sampling (same as training), NOT argmax!
-            # argmax always picks the single highest prob, collapsing a
-            # balanced policy like [0.35, 0.25, 0.22, 0.18] into "always
-            # INVESTIGATE". Sampling reproduces the trained behavior.
             idx   = int(np.random.choice(4, p=probs))
             act   = _ACTION_NAMES[idx]
             conf  = round(float(probs[idx]) * 100, 1)
@@ -563,12 +569,13 @@ async def recommend():
 
 @app.get("/agent/weights/{task_id}")
 async def download_weights(task_id: str):
-    """Download trained weights for a task."""
     from fastapi import HTTPException
     path = os.path.join(_project_root if _project_root else os.getcwd(), "weights", f"ppo_{task_id}.json")
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail=f"No trained weights found for {task_id}")
     return FileResponse(path, media_type='application/json', filename=f"ppo_{task_id}.json")
+
+
 # ── WebSocket ─────────────────────────────────────────────────────────────────
 
 @app.websocket("/ws/train")
@@ -618,14 +625,21 @@ async def ws_train(websocket: WebSocket):
 @app.get("/")
 async def root():
     return {
-        "name": "Adaptive Alert Triage RL Server", "version": "0.3.0",
+        "name": "Adaptive Alert Triage RL Server", "version": "0.3.1",
+        "openenv_endpoints": {
+            "reset":  "POST /reset",
+            "step":   "POST /env/step",
+            "state":  "GET  /env/state",
+            "health": "GET  /health",
+        },
         "quick_start": [
             "1. python train_rl.py --episodes 300",
-            "2. uvicorn src.adaptive_alert_triage.server:app --port 8000",
-            "3. curl -X POST localhost:8000/ingest/alerts -H 'Content-Type: application/json' -d '{\"id\":\"p1\",\"visible_severity\":0.9,\"confidence\":0.85,\"type\":\"CPU\"}'",
-            "4. curl localhost:8000/agent/recommend",
+            "2. uvicorn src.adaptive_alert_triage.server:app --port 7860",
+            "3. curl -X POST localhost:7860/reset",
+            "4. curl localhost:7860/agent/recommend",
         ],
     }
+
 
 import threading
 import subprocess
@@ -651,16 +665,14 @@ def _run_training(episodes: int):
                 if len(_training_logs) > 1000:
                     _training_logs.pop(0)
         _training_proc.wait()
-        _training_logs.append(f"Training finished with exit code {- _training_proc.returncode if _training_proc.returncode < 0 else _training_proc.returncode}")
-        
-        # Auto-reload PPO weights if training succeeded
+        _training_logs.append(f"Training finished with exit code {_training_proc.returncode}")
+
         if _training_proc.returncode == 0:
             for tid in ("easy", "medium", "hard"):
                 agent = _load_ppo(tid)
                 if agent:
                     _ppo_agents[tid] = agent
             _training_logs.append("Successfully reloaded PPO weights for all tasks.")
-            
     except Exception as e:
         _training_logs.append(f"Error starting training: {e}")
 
@@ -680,10 +692,6 @@ async def get_training_status():
 
 @app.get("/web")
 async def web_ui():
-    """
-    Serves the interactive web dashboard for real-time monitoring.
-    OpenEnv-compliant: Matches HF Spaces `/web` endpoint convention.
-    """
     import os
     dashboard_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(__file__))),

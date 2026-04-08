@@ -64,10 +64,10 @@ except ImportError:
     _OPENAI_OK = False
 
 # ── Env-var config (checklist-specified names) ────────────────────────────────
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.x.ai/v1")
-MODEL_NAME   = os.environ.get("MODEL_NAME",   "grok-4-1-fast-reasoning")
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
+MODEL_NAME   = os.environ.get("MODEL_NAME", "gpt-4o-mini")  # or gpt-4o
 HF_TOKEN     = os.environ.get("HF_TOKEN",     "")
-_API_KEY     = HF_TOKEN or os.environ.get("GROK_API_KEY", "no-key-set")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "no-key-set")
 
 # ── Task registry ─────────────────────────────────────────────────────────────
 _TASKS: Dict[str, Dict[str, Any]] = {

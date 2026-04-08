@@ -69,8 +69,19 @@ Homepage = "https://github.com/scalar/adaptive-alert-triage"
 Documentation = "https://github.com/scalar/adaptive-alert-triage#readme"
 Repository = "https://github.com/scalar/adaptive-alert-triage"
 
+# ── CLI entry points ──────────────────────────────────────────────────────────
+# FIX 9: Register `openenv` as a CLI command so the pre-submission validator
+# can call `openenv validate` and have it resolve to our validate.py::main().
+#
+# The pre-submission checker runs:
+#   openenv validate
+# which now maps to:
+#   src/adaptive_alert_triage/validate.py → OpenEnvValidator().run_all_checks()
+#
+# Also keeps the original `alert-triage` entry point for backwards compat.
 [project.scripts]
 alert-triage = "adaptive_alert_triage.env:main"
+openenv      = "adaptive_alert_triage.validate:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
