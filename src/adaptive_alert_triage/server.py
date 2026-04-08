@@ -707,3 +707,15 @@ async def list_tasks():
         {"id": "medium", "success_threshold": 0.55, "max_steps": 40},
         {"id": "hard",   "success_threshold": 0.50, "max_steps": 50},
     ]}
+
+
+def main():
+    """Entry point for the server CLI command."""
+    import uvicorn
+    import os
+    port = int(os.environ.get("PORT", 7860))
+    uvicorn.run("adaptive_alert_triage.server:app", host="0.0.0.0", port=port)
+
+
+if __name__ == "__main__":
+    main()
