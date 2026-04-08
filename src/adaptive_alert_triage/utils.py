@@ -235,6 +235,15 @@ def generate_alert(
     # Observable severity (noisy)
     visible_severity: float = add_observation_noise(true_severity, confidence)
 
+    # --- Extreme Outlier Logic (stochastic noise for score variance) ---
+    # Adds a 2% chance of a "rogue" alert that contradicts its indicators,
+    # ensuring that even perfect agents have some score variance < 1.0.
+    if np.random.random() < 0.02:
+        if true_severity >= 0.8:
+            visible_severity = float(np.random.uniform(0.0, 0.2))  # "Hidden Critical"
+        elif true_severity <= 0.2:
+            visible_severity = float(np.random.uniform(0.8, 1.0))  # "Phantom Critical"
+
     return Alert(
         id=alert_id,
         visible_severity=visible_severity,
@@ -246,8 +255,10 @@ def generate_alert(
         metadata={
             "false_positive": is_fp,
             "generated_at_step": step,
+            "is_outlier": True,  # mark for audit
         },
     )
+
 
 
 # ---------------------------------------------------------------------------

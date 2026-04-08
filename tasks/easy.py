@@ -60,7 +60,7 @@ _MEDIUM_ESCALATE_MIN: float      = 0.60   # ESCALATE acceptable above this
 _MEDIUM_IGNORE_MAX: float        = 0.50   # IGNORE acceptable below this
 
 # Pass threshold
-SUCCESS_THRESHOLD: float = 0.70
+SUCCESS_THRESHOLD: float = 0.696
 
 
 # ---------------------------------------------------------------------------
@@ -161,14 +161,20 @@ class EasyTaskGrader:
 
     def get_episode_score(self) -> float:
         """
-        Return final normalised score in [0.0, 1.0].
+        Return final normalised score in (0, 1).
 
-        Formula: correct_actions / total_actions
-        Returns 0.0 when no actions have been taken.
+        Formula: 0.01 + 0.98 * (correct_actions / total_actions)
+        This ensures the score is always strictly between 0 and 1 as
+        required by the grading system.
         """
         if self.total_actions == 0:
-            return 0.0
-        return self.correct_actions / self.total_actions
+            return 0.01
+
+        raw = self.correct_actions / self.total_actions
+        # Enforce strict (0, 1) range
+        clamped = 0.01 + 0.98 * raw
+        return round(float(clamped), 6)
+
 
     def passed(self) -> bool:
         """Return True if the agent meets the easy-task success threshold."""
