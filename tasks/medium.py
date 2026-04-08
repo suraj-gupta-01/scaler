@@ -76,7 +76,7 @@ _CRITICAL_MISS_PENALTY_WEIGHT: float = 0.20
 # Filtering-bonus cap so ignoring FPs never inflates score above 1.0
 _FP_BONUS_CAP_PER_ALERT: float = 0.15
 
-SUCCESS_THRESHOLD: float = 0.55
+SUCCESS_THRESHOLD: float = 0.549
 
 
 # ---------------------------------------------------------------------------
@@ -192,14 +192,15 @@ class MediumTaskGrader:
 
     def get_episode_score(self) -> float:
         """
-        Return final normalised score in [0.0, 1.0].
+        Return final normalised score in (0, 1).
 
         Formula:
             raw   = resolved_score / max_possible_score
-            score = max(0.0, raw − fp_penalty − critical_miss_penalty)
+            base  = max(0.0, raw − fp_penalty − miss_penalty)
+            clamped = 0.01 + 0.98 * base
         """
         if self._max_possible_score <= 0.0:
-            return 0.0
+            return 0.01
 
         # Normalised resolved quality
         raw = min(self._resolved_score / self._max_possible_score, 1.0)
@@ -218,8 +219,11 @@ class MediumTaskGrader:
             miss_rate = 0.0
         miss_penalty = _CRITICAL_MISS_PENALTY_WEIGHT * miss_rate
 
-        score = max(0.0, raw - fp_penalty - miss_penalty)
-        return round(score, 6)
+        base_score = max(0.0, raw - fp_penalty - miss_penalty)
+        # Enforce strict (0, 1) range
+        clamped = 0.01 + 0.98 * base_score
+        return round(float(clamped), 6)
+
 
     def passed(self) -> bool:
         """Return True if the agent meets the medium-task success threshold."""

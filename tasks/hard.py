@@ -372,15 +372,13 @@ class HardTaskGrader:
 
     def get_episode_score(self) -> float:
         """
-        Return final normalised score in [0.0, 1.0].
+        Return final normalised score in (0, 1).
 
         Formula:
-            chain_score  = Σ chain.outcome_score()  for all chains
-            max_chain    = Σ chain.max_possible()    for all chains
-            isolation    = min(isolation_correct * _ISOLATION_BONUS, cap)
-            raw          = (chain_score + isolation) / max(max_chain, 1.0)
+            chain_score  = Σ chain.outcome_score()
             stability    = _stability_score(system_failures)
-            final        = max(0.0, min(raw * stability, 1.0))
+            base         = (raw * stability)
+            clamped      = 0.01 + 0.98 * base
         """
         # Chain component
         chain_score = sum(c.outcome_score() for c in self._chains.values())
@@ -396,8 +394,12 @@ class HardTaskGrader:
         raw = min((chain_score + isolation) / denominator, 1.0)
 
         stability = self._stability_score(self._system_failures)
-        final     = max(0.0, min(raw * stability, 1.0))
-        return round(final, 6)
+        final_base = max(0.0, min(raw * stability, 1.0))
+
+        # Enforce strict (0, 1) range
+        clamped = 0.01 + 0.98 * final_base
+        return round(float(clamped), 6)
+
 
     def passed(self) -> bool:
         """Return True if the agent meets the hard-task success threshold."""
