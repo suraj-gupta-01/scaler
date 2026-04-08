@@ -82,9 +82,14 @@ Repository = "https://github.com/scalar/adaptive-alert-triage"
 [project.scripts]
 alert-triage = "adaptive_alert_triage.env:main"
 openenv      = "adaptive_alert_triage.validate:main"
+server        = "server.app:main"
+
+
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["adaptive_alert_triage*", "server*"]
+
 
 [tool.black]
 line-length = 100
