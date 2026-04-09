@@ -411,17 +411,16 @@ class HardTaskGrader:
         """
         Fraction of chains that were successfully stopped (any position).
 
-        Returns 0.99 when no chains exist (nothing to detect).
+        Returns 1.0 when no chains exist (nothing to detect).
         """
         if not self._chains:
-            return 0.99
+            return 1.0
         stopped = sum(
             1 for c in self._chains.values()
             if c.completed and not c.hit_failure
         )
         raw = stopped / len(self._chains)
-        # Clamp to (0, 1)
-        return max(0.01, min(raw, 0.99))
+        return raw
 
     def calculate_stability_score(self) -> float:
         """Return the stability multiplier for the current failure count."""
@@ -570,13 +569,11 @@ class HardTaskGrader:
 
     @staticmethod
     def _stability_score(failures: int) -> float:
-        """Step-function stability multiplier clamped to (0, 1)."""
+        """Step-function stability multiplier."""
         for threshold, score in _STABILITY_BY_FAILURES:
             if failures <= threshold:
-                # Clamp stability scores to strict (0, 1)
-                return max(0.01, min(score, 0.99))
-        # Return floor clamped to (0, 1)
-        return max(0.01, min(_STABILITY_FLOOR, 0.99))
+                return score
+        return _STABILITY_FLOOR
 
 
 # ---------------------------------------------------------------------------

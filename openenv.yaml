@@ -140,7 +140,7 @@ tasks:
     correlation_probability: 0.10
     success_threshold: 0.70 # correct_actions / total_actions >= 0.70
     grader: "tasks.easy.EasyTaskGrader"
-    grading_formula: "score = correct_actions / total_actions"
+    grading_formula: "score = max(0.01, min(0.99, (correct_actions / total_actions) * 0.98 + 0.01))"
 
   - id: "medium"
     name: "Resource-Constrained Triage"
@@ -158,7 +158,8 @@ tasks:
     grader: "tasks.medium.MediumTaskGrader"
     grading_formula: |
       raw = resolved_score / max_possible_score
-      score = max(0, raw - fp_penalty(0.30) - critical_miss_penalty(0.20))
+      base_score = max(0, raw - fp_penalty(0.30) - critical_miss_penalty(0.20))
+      score = max(0.01, min(0.99, base_score * 0.98 + 0.01))
 
   - id: "hard"
     name: "Cascading Failure Prevention"
@@ -178,7 +179,8 @@ tasks:
     grading_formula: |
       chain_score = Σ stop_reward(position) × severity_weight
       stability   = {0 failures: 1.0, 1: 0.80, 2: 0.60, 3: 0.30, 4+: 0.00}
-      score       = min(chain_score / max_possible * stability, 1.0)
+      base_score  = min(chain_score / max_possible * stability, 1.0)
+      score       = max(0.01, min(0.99, base_score * 0.98 + 0.01))
 
 # ── Evaluation metrics (produced by graders) ──────────────────────────────────
 metrics:

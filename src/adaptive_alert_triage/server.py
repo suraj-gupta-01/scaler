@@ -130,7 +130,8 @@ def _tick(info: Dict) -> None:
 
 
 def _score() -> float:
-    return _step_correct / _step_total if _step_total else 0.0
+    raw = _step_correct / _step_total if _step_total else 0.0
+    return max(0.01, min(round(0.01 + 0.98 * raw, 2), 0.99))
 
 
 # ── PPO helpers ───────────────────────────────────────────────────────────────
@@ -602,7 +603,8 @@ async def ws_train(websocket: WebSocket):
                 obs, reward, done, info = env.step(act)
                 lt += 1
                 if info.get("action_correct", False): lc += 1
-                s = lc / lt if lt else 0.0
+                raw_s = lc / lt if lt else 0.0
+                s = max(0.01, min(round(0.01 + 0.98 * raw_s, 2), 0.99))
                 if done: episode_scores.append(s)
                 info["task_score"] = s
                 await websocket.send_json({
