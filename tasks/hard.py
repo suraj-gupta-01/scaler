@@ -398,7 +398,9 @@ class HardTaskGrader:
 
         # Enforce strict (0, 1) range
         clamped = 0.01 + 0.98 * final_base
-        return round(float(clamped), 6)
+        rounded = round(float(clamped), 2)
+        # Ensure no rounding to boundaries (0.0 or 1.0)
+        return max(0.01, min(rounded, 0.99))
 
 
     def passed(self) -> bool:
