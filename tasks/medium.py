@@ -236,14 +236,16 @@ class MediumTaskGrader:
         Fraction of INVESTIGATE + ESCALATE actions that were productive.
 
         Productive = action on an alert with true_severity ≥ 0.50.
-        Returns 1.0 when no costly actions were taken (no waste, but also no work).
+        Returns 0.99 when no costly actions were taken (or 0.99 for perfect efficiency).
         """
         costly = [h for h in self._action_history
                   if h["action"] in ("INVESTIGATE", "ESCALATE")]
         if not costly:
-            return 1.0
+            return 0.99
         productive = sum(1 for h in costly if h["true_severity"] >= _MEDIUM_LOWER)
-        return productive / len(costly)
+        raw = productive / len(costly)
+        # Clamp to (0, 1)
+        return max(0.01, min(raw, 0.99))
 
     # ------------------------------------------------------------------
     # Metrics
