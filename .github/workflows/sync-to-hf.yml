@@ -26,5 +26,5 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_USERNAME: ${{ secrets.HF_USERNAME }}
         run: |
-          git remote add hf https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/${HF_USERNAME}/scaler-openenv
+          git remote add hf https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/scaler-hack/scaler-openenv
           git push hf main --force
