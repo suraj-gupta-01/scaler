@@ -192,27 +192,19 @@ class MediumTaskGrader:
 
     def get_episode_score(self) -> float:
         """
-        Return final normalised score in (0, 1).
-
-        Formula:
-            raw   = resolved_score / max_possible_score
-            base  = max(0.0, raw − fp_penalty − miss_penalty)
-            clamped = 0.01 + 0.98 * base
+        Return final normalised score strictly in (0, 1) — never 0.0 or 1.0.
         """
         if self._max_possible_score <= 0.0:
-            return 0.01
+            return 0.5
 
-        # Normalised resolved quality
         raw = min(self._resolved_score / self._max_possible_score, 1.0)
 
-        # Penalty 1: wasted investigation budget on false positives
         if self._total_investigations > 0:
             fp_rate = self._unnecessary_invest / self._total_investigations
         else:
             fp_rate = 0.0
         fp_penalty = _FP_PENALTY_WEIGHT * fp_rate
 
-        # Penalty 2: missed critical alerts
         if self._critical_total > 0:
             miss_rate = min(self._critical_missed / self._critical_total, 1.0)
         else:
@@ -220,11 +212,9 @@ class MediumTaskGrader:
         miss_penalty = _CRITICAL_MISS_PENALTY_WEIGHT * miss_rate
 
         base_score = max(0.0, raw - fp_penalty - miss_penalty)
-        # Enforce strict (0, 1) range
-        clamped = 0.01 + 0.98 * base_score
-        rounded = round(float(clamped), 2)
-        # Ensure no rounding to boundaries (0.0 or 1.0)
-        return max(0.01, min(rounded, 0.99))
+        # Map [0,1] -> (0,1) with a small epsilon margin, no rounding
+        score = 0.001 + 0.998 * float(base_score)
+        return max(0.001, min(0.999, score))
 
 
     def passed(self) -> bool:

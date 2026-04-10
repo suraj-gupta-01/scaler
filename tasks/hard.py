@@ -372,19 +372,11 @@ class HardTaskGrader:
 
     def get_episode_score(self) -> float:
         """
-        Return final normalised score in (0, 1).
-
-        Formula:
-            chain_score  = Σ chain.outcome_score()
-            stability    = _stability_score(system_failures)
-            base         = (raw * stability)
-            clamped      = 0.01 + 0.98 * base
+        Return final normalised score strictly in (0, 1) — never 0.0 or 1.0.
         """
-        # Chain component
         chain_score = sum(c.outcome_score() for c in self._chains.values())
         max_chain   = sum(c.max_possible()  for c in self._chains.values())
 
-        # Isolation bonus (capped)
         isolation = min(
             self._isolation_correct * _ISOLATION_BONUS_PER_ALERT,
             _ISOLATION_BONUS_CAP,
@@ -396,11 +388,9 @@ class HardTaskGrader:
         stability = self._stability_score(self._system_failures)
         final_base = max(0.0, min(raw * stability, 1.0))
 
-        # Enforce strict (0, 1) range
-        clamped = 0.01 + 0.98 * final_base
-        rounded = round(float(clamped), 2)
-        # Ensure no rounding to boundaries (0.0 or 1.0)
-        return max(0.01, min(rounded, 0.99))
+        # Map [0,1] -> (0,1) with a small epsilon margin, no rounding
+        score = 0.001 + 0.998 * float(final_base)
+        return max(0.001, min(0.999, score))
 
 
     def passed(self) -> bool:

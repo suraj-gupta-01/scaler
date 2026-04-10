@@ -161,21 +161,15 @@ class EasyTaskGrader:
 
     def get_episode_score(self) -> float:
         """
-        Return final normalised score in (0, 1).
-
-        Formula: 0.01 + 0.98 * (correct_actions / total_actions)
-        This ensures the score is always strictly between 0 and 1 as
-        required by the grading system.
+        Return final normalised score strictly in (0, 1) — never 0.0 or 1.0.
         """
         if self.total_actions == 0:
-            return 0.01
+            return 0.5
 
         raw = self.correct_actions / self.total_actions
-        # Enforce strict (0, 1) range
-        clamped = 0.01 + 0.98 * raw
-        rounded = round(float(clamped), 2)
-        # Ensure no rounding to boundaries (0.0 or 1.0)
-        return max(0.01, min(rounded, 0.99))
+        # Map [0,1] -> (0,1) with a small epsilon margin, no rounding
+        score = 0.001 + 0.998 * float(raw)
+        return max(0.001, min(0.999, score))
 
 
     def passed(self) -> bool:
