@@ -212,9 +212,11 @@ class MediumTaskGrader:
         miss_penalty = _CRITICAL_MISS_PENALTY_WEIGHT * miss_rate
 
         base_score = max(0.0, raw - fp_penalty - miss_penalty)
-        # Map [0,1] -> (0,1) with a small epsilon margin, no rounding
-        score = 0.001 + 0.998 * float(base_score)
-        return max(0.001, min(0.999, score))
+        if base_score == 0.0:
+            return 0.001
+        if base_score == 1.0:
+            return 0.999
+        return float(base_score)
 
 
     def passed(self) -> bool:

@@ -167,9 +167,11 @@ class EasyTaskGrader:
             return 0.5
 
         raw = self.correct_actions / self.total_actions
-        # Map [0,1] -> (0,1) with a small epsilon margin, no rounding
-        score = 0.001 + 0.998 * float(raw)
-        return max(0.001, min(0.999, score))
+        if raw == 0.0:
+            return 0.001
+        if raw == 1.0:
+            return 0.999
+        return float(raw)
 
 
     def passed(self) -> bool:

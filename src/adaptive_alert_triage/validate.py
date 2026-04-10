@@ -69,13 +69,13 @@ class OpenEnvValidator:
     def check(self, name: str, condition: bool, details: str = "") -> bool:
         if condition:
             self.checks_passed.append(name)
-            self.log(f"✓ {name}", "PASS")
+            self.log(f"[PASS] {name}", "PASS")
             if details:
                 self.log(f"  {details}", "INFO")
             return True
         else:
             self.checks_failed.append((name, details))
-            self.log(f"✗ {name}", "FAIL")
+            self.log(f"[FAIL] {name}", "FAIL")
             if details:
                 self.log(f"  {details}", "ERROR")
             return False
@@ -370,7 +370,7 @@ class OpenEnvValidator:
                 if details:
                     self.log(f"    {details}", "ERROR")
         else:
-            self.log("All checks passed! ✓", "PASS")
+            self.log("All checks passed!", "PASS")
 
         self.log("=" * 60 + "\n", "INFO")
         return len(self.checks_failed) == 0
