@@ -87,13 +87,18 @@ def log_start(task: str, episode: int, seed: int) -> None:
     _emit("[START]", {"task": task, "episode": episode, "seed": seed})
 
 
+def _clamp_score(s: float) -> float:
+    """Clamp to (0, 1) — never exactly 0.0 or 1.0."""
+    return max(0.0001, min(0.9999, round(s, 4)))
+
+
 def log_step(step: int, alert_id: str, action: str,
              score: float, reward: float, done: bool) -> None:
     _emit("[STEP]", {
         "step":     step,
         "alert_id": alert_id,
         "action":   action,
-        "score":    round(score, 4),
+        "score":    _clamp_score(score),
         "reward":   round(reward, 4),
         "done":     done,
     })
@@ -101,7 +106,7 @@ def log_step(step: int, alert_id: str, action: str,
 
 def log_end(task: str, episode: int, score: float, passed: bool) -> None:
     _emit("[END]", {"task": task, "episode": episode,
-                    "score": round(score, 4), "passed": passed})
+                    "score": _clamp_score(score), "passed": passed})
 
 
 # ── LLM system prompt ─────────────────────────────────────────────────────────
