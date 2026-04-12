@@ -76,7 +76,7 @@ class EasyTaskGrader:
     1. Instantiate once per episode.
     2. After every env.step(action), iterate info["processed_alerts"] and
        call process_step(alert_data, info) for each entry.
-    3. At episode end call get_episode_score() → float in [0.0, 1.0].
+    3. At episode end call get_episode_score() → float strictly in (0, 1).
     4. Optionally call get_metrics() for a full breakdown.
     5. Call reset() to reuse the grader for a new episode.
 
@@ -107,7 +107,7 @@ class EasyTaskGrader:
                         kept for consistent API across all three graders).
 
         Returns:
-            1.0 if the action was correct, 0.0 otherwise.
+            0.99 if the action was correct, 0.01 otherwise (strictly in (0, 1)).
         """
         self.total_actions += 1
 
@@ -127,10 +127,10 @@ class EasyTaskGrader:
             "alert_type":      alert_data.get("alert_type", ""),
             "is_false_positive":alert_data.get("is_false_positive", False),
             "correct":         is_correct,
-            "score":           1.0 if is_correct else 0.0,
+            "score":           0.99 if is_correct else 0.01,
         })
 
-        return 1.0 if is_correct else 0.0
+        return 0.99 if is_correct else 0.01
 
     # ------------------------------------------------------------------
     # Legacy API  (unit tests / backward compat)
@@ -167,12 +167,10 @@ class EasyTaskGrader:
             return 0.5
 
         raw = self.correct_actions / self.total_actions
-        rraw=round(raw,2)
-        if rraw == 0.00:
-            return 0.01
-        if rraw == 1.00:
-            return 0.99
-        return float(rraw)
+        # Clamp to strictly (0, 1) - never exactly 0.0 or 1.0
+        clamped = max(0.01, min(0.99, raw))
+        # Round to 2 decimals for consistency
+        return float(round(clamped, 2))
 
 
     def passed(self) -> bool:
