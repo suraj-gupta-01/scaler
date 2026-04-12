@@ -76,22 +76,22 @@ except ImportError:
 
 _TASK_CONFIGS: Dict[str, Dict[str, Any]] = {
     "easy": {
-        "max_steps": 30,
-        "failure_threshold": 5,
+        "max_steps": 10,
+        "failure_threshold": 2,
         "max_investigations": None,   # unconstrained
         "correlation_probability": 0.10,
         "description": "Basic alert prioritisation — no resource constraint.",
     },
     "medium": {
-        "max_steps": 40,
-        "failure_threshold": 5,
+        "max_steps": 15,
+        "failure_threshold": 3,
         "max_investigations": 3,      # K = 3 per step
         "correlation_probability": 0.20,
         "description": "Resource-constrained triage — K=3 investigations/step.",
     },
     "hard": {
-        "max_steps": 50,
-        "failure_threshold": 3,       # stricter
+        "max_steps": 20,
+        "failure_threshold": 2,       # stricter
         "max_investigations": 3,
         "correlation_probability": 0.40,
         "description": (
@@ -267,7 +267,7 @@ class AdaptiveAlertTriageEnv(gym.Env):
         alert = self._get_alert_by_id(action.alert_id)
         if alert is None:
             reward = Reward(
-                value=-5.0,
+                value=0.01,
                 components={"invalid_action": -5.0},
                 info={"error": f"Alert ID '{action.alert_id}' not found in queue"},
             )
@@ -284,7 +284,7 @@ class AdaptiveAlertTriageEnv(gym.Env):
         ):
             if self.investigations_used >= self.max_investigations_per_step:
                 reward = Reward(
-                    value=-3.0,
+                    value=0.01,
                     components={"resource_budget_exceeded": -3.0},
                     info={
                         "error": "Investigation budget exhausted for this step",

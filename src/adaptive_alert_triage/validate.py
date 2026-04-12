@@ -123,7 +123,7 @@ class OpenEnvValidator:
             action_ok = restored.alert_id == action.alert_id
             self.check("Action serialization round-trip", action_ok)
 
-            reward   = Reward(value=10.0, components={"test": 10.0})
+            reward   = Reward(value=0.5, components={"test": 0.5})
             restored = Reward.model_validate_json(reward.model_dump_json())
             reward_ok = restored.value == reward.value
             self.check("Reward serialization round-trip", reward_ok)

@@ -315,6 +315,7 @@ def calculate_reward(
         components = {k: v * multiplier for k, v in components.items()}
 
     total_reward: float = sum(components.values())
+    norm_reward: float = max(0.01, min(0.99, (total_reward + 40.0) / 80.0))
 
     # -----------------------------------------------------------------------
     # Info payload — consumed by graders and evaluation scripts
@@ -331,10 +332,11 @@ def calculate_reward(
             action_type, is_critical, is_false_positive, resource_constrained
         ),
         "task_multiplier":   multiplier,
+        "raw_reward":        total_reward,
     }
 
     return Reward(
-        value=total_reward,
+        value=norm_reward,
         components=components,
         info=info,
     )
@@ -611,7 +613,8 @@ if __name__ == "__main__":
     for desc, act, alert, cfg, expected in cases:
         action = Action(alert_id=alert.id, action_type=act)
         result = calculate_reward(action, alert, cfg)
-        ok = abs(result.value - expected) < 1e-4
+        normalized_expected = max(0.01, min(0.99, (expected + 40.0) / 80.0))
+        ok = abs(result.value - normalized_expected) < 1e-4
         status = "PASS" if ok else "FAIL"
         if not ok:
             all_pass = False

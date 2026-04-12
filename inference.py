@@ -67,7 +67,7 @@ except ImportError:
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME",   "gpt-4o")
 HF_TOKEN     = os.environ.get("HF_TOKEN")
-_API_KEY     = HF_TOKEN or os.environ.get("OPENAI_API_KEY", "no-key-set")
+_API_KEY     = os.environ.get("API_KEY") or HF_TOKEN or os.environ.get("OPENAI_API_KEY", "no-key-set")
 
 # ── Task registry ─────────────────────────────────────────────────────────────
 _TASKS: Dict[str, Dict[str, Any]] = {
@@ -171,6 +171,7 @@ class LLMTriageAgent:
     def act(self, obs: Observation) -> Action:
         if not obs.alerts:
             raise ValueError("act() called with empty alerts")
+            
         text = self._call_api(_build_user_message(obs))
         if text is None:
             self.fallbacks += 1
@@ -306,7 +307,7 @@ def run_episode(agent: LLMTriageAgent, task_id: str, episode: int, seed: int) ->
 
 def run_baseline(
     tasks:        List[str],
-    num_episodes: int = 3,
+    num_episodes: int = 1,
     seed_offset:  int = 42,
 ) -> Dict[str, Any]:
     """
@@ -383,9 +384,9 @@ if __name__ == "__main__":
     )
     p.add_argument("--task",  choices=["easy", "medium", "hard"],
                    default=None, help="Single task (default: all three)")
-    p.add_argument("--n",     type=int, default=3,
+    p.add_argument("--n",     type=int, default=1,
                    metavar="N",
-                   help="Episodes per task (default: 3 — fits in 20 min budget)")
+                   help="Episodes per task (default: 1 — strict API budget)")
     p.add_argument("--seed",  type=int, default=42,
                    help="Base random seed (default: 42)")
     args = p.parse_args()
