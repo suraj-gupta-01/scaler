@@ -222,13 +222,7 @@ class Reward(BaseModel):
         info:       Debugging / logging extras (ground-truth reveal, etc.).
     """
 
-    value: float = Field(..., ge=0.0, le=1.0, description="Total scalar reward in [0.0, 1.0]")
-
-    @field_validator("value", mode="before")
-    @classmethod
-    def clamp_reward_value(cls, v: float) -> float:
-        """Silently clamp reward value to [0.01, 0.99] — strict (0, 1) bounds."""
-        return float(max(0.01, min(0.99, float(v))))
+    value: float = Field(..., description="Total scalar reward")
 
     components: Dict[str, float] = Field(
         default_factory=dict, description="Per-component reward breakdown"

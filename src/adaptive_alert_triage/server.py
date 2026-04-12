@@ -131,7 +131,7 @@ def _tick(info: Dict) -> None:
 
 def _score() -> float:
     raw = _step_correct / _step_total if _step_total else 0.0
-    return max(0.01, min(round(0.01 + 0.98 * raw, 2), 0.99))
+    return round((raw * 0.98) + 0.01, 4)
 
 
 # ── PPO helpers ───────────────────────────────────────────────────────────────
@@ -604,7 +604,7 @@ async def ws_train(websocket: WebSocket):
                 lt += 1
                 if info.get("action_correct", False): lc += 1
                 raw_s = lc / lt if lt else 0.0
-                s = max(0.01, min(round(0.01 + 0.98 * raw_s, 2), 0.99))
+                s = round((raw_s * 0.98) + 0.01, 4)
                 if done: episode_scores.append(s)
                 info["task_score"] = s
                 await websocket.send_json({

@@ -107,26 +107,26 @@ class TestTaskConfigurations:
     def test_easy_task_config(self):
         """Test easy task has correct configuration."""
         env = AdaptiveAlertTriageEnv(task_id="easy", seed=42)
-        
-        assert env.max_steps == 30
+    
+        assert env.max_steps == 10
         assert env.max_investigations_per_step is None  # No resource constraint
-        assert env.failure_threshold == 5
+        assert env.failure_threshold == 2
     
     def test_medium_task_config(self):
         """Test medium task has resource constraints."""
         env = AdaptiveAlertTriageEnv(task_id="medium", seed=42)
-        
-        assert env.max_steps == 40
+    
+        assert env.max_steps == 15
         assert env.max_investigations_per_step == 3  # Resource constrained
-        assert env.failure_threshold == 5
+        assert env.failure_threshold == 3
     
     def test_hard_task_config(self):
         """Test hard task has stricter failure tolerance."""
         env = AdaptiveAlertTriageEnv(task_id="hard", seed=42)
-        
-        assert env.max_steps == 50
+    
+        assert env.max_steps == 20
         assert env.max_investigations_per_step == 3
-        assert env.failure_threshold == 3  # Stricter
+        assert env.failure_threshold == 2  # Stricter
     
     def test_resource_budget_tracking(self):
         """Test resource budget is tracked in medium/hard tasks."""

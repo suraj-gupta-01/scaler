@@ -127,10 +127,10 @@ class EasyTaskGrader:
             "alert_type":      alert_data.get("alert_type", ""),
             "is_false_positive":alert_data.get("is_false_positive", False),
             "correct":         is_correct,
-            "score":           0.99 if is_correct else 0.01,
+            "score":           1.0 if is_correct else 0.0,
         })
 
-        return 0.99 if is_correct else 0.01
+        return 1.0 if is_correct else 0.0
 
     # ------------------------------------------------------------------
     # Legacy API  (unit tests / backward compat)
@@ -167,10 +167,10 @@ class EasyTaskGrader:
             return 0.5
 
         raw = self.correct_actions / self.total_actions
-        # Clamp to strictly (0, 1) - never exactly 0.0 or 1.0
-        clamped = max(0.01, min(0.99, raw))
-        # Round to 2 decimals for consistency
-        return float(round(clamped, 2))
+        
+        # Linearly map exactly to [0.01, 0.99] without clipping
+        mapped = (raw * 0.98) + 0.01
+        return float(round(mapped, 4))
 
 
     def passed(self) -> bool:

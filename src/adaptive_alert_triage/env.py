@@ -267,7 +267,7 @@ class AdaptiveAlertTriageEnv(gym.Env):
         alert = self._get_alert_by_id(action.alert_id)
         if alert is None:
             reward = Reward(
-                value=0.01,
+                value=-5.0,
                 components={"invalid_action": -5.0},
                 info={"error": f"Alert ID '{action.alert_id}' not found in queue"},
             )
@@ -284,7 +284,7 @@ class AdaptiveAlertTriageEnv(gym.Env):
         ):
             if self.investigations_used >= self.max_investigations_per_step:
                 reward = Reward(
-                    value=0.01,
+                    value=-3.0,
                     components={"resource_budget_exceeded": -3.0},
                     info={
                         "error": "Investigation budget exhausted for this step",

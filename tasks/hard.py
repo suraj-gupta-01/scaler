@@ -383,14 +383,14 @@ class HardTaskGrader:
         )
 
         denominator = max(max_chain, 1.0)
-        raw = min((chain_score + isolation) / denominator, 1.0)
-
+        raw = (chain_score + isolation) / denominator
+        
         stability = self._stability_score(self._system_failures)
-        final_base = max(0.0, min(raw * stability, 1.0))
-        # Clamp to strictly (0, 1) - never exactly 0.0 or 1.0
-        clamped = max(0.01, min(0.99, final_base))
-        # Round to 2 decimals for consistency
-        return float(round(clamped, 2))
+        
+        # Raw * stability is naturally in [0, 1].
+        # Map [0, 1] linearly to [0.01, 0.99] without clipping
+        mapped = (raw * stability * 0.98) + 0.01
+        return float(round(mapped, 4))
 
 
     def passed(self) -> bool:

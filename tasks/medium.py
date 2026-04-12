@@ -197,25 +197,27 @@ class MediumTaskGrader:
         if self._max_possible_score <= 0.0:
             return 0.5
 
-        raw = min(self._resolved_score / self._max_possible_score, 1.0)
-
+        raw = self._resolved_score / self._max_possible_score
+        
         if self._total_investigations > 0:
             fp_rate = self._unnecessary_invest / self._total_investigations
         else:
             fp_rate = 0.0
         fp_penalty = _FP_PENALTY_WEIGHT * fp_rate
-
+        
         if self._critical_total > 0:
             miss_rate = min(self._critical_missed / self._critical_total, 1.0)
         else:
             miss_rate = 0.0
         miss_penalty = _CRITICAL_MISS_PENALTY_WEIGHT * miss_rate
-
-        base_score = max(0.0, raw - fp_penalty - miss_penalty)
-        # Clamp to strictly (0, 1) - never exactly 0.0 or 1.0
-        clamped = max(0.01, min(0.99, base_score))
-        # Round to 2 decimals for consistency
-        return float(round(clamped, 2))
+        
+        # Penalised score is effectively between -0.50 and 1.00
+        penalised = raw - fp_penalty - miss_penalty
+        
+        # Math map: penalised * 0.6 is [-0.3, 0.6]
+        # + 0.35 yields [0.05, 0.95] which guarantees (0, 1) bounds without clipping.
+        mapped = (penalised * 0.6) + 0.35
+        return float(round(mapped, 4))
 
 
     def passed(self) -> bool:
