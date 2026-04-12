@@ -387,12 +387,12 @@ class HardTaskGrader:
 
         stability = self._stability_score(self._system_failures)
         final_base = max(0.0, min(raw * stability, 1.0))
-
-        if final_base == 0.0:
-            return 0.001
-        if final_base == 1.0:
-            return 0.999
-        return float(final_base)
+        rfinal=round(final_base,2)
+        if rfinal == 0.0:
+            return 0.01
+        if rfinal == 1.00:
+            return 0.99
+        return float(rfinal)
 
 
     def passed(self) -> bool:
